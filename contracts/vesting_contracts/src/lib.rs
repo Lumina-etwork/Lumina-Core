@@ -562,8 +562,9 @@ impl VestingContract {
             
             if vault.step_duration > 0 {
                 let steps = duration / vault.step_duration as i128;
+                if steps == 0 { return 0; }
                 let completed = elapsed / vault.step_duration as i128;
-                (vault.total_amount / steps) * completed
+                (vault.total_amount * completed) / steps
             } else {
                 (vault.total_amount * elapsed) / duration
             }
@@ -668,3 +669,5 @@ impl VestingContract {
 
 #[cfg(test)]
 mod test;
+#[cfg(test)]
+mod invariant_test;
