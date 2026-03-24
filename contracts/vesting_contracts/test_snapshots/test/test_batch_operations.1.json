@@ -99,15 +99,75 @@
                   "map": [
                     {
                       "key": {
-                        "symbol": "amounts"
+                        "symbol": "allocations"
                       },
                       "val": {
                         "vec": [
                           {
-                            "i128": "500"
+                            "map": [
+                              {
+                                "key": {
+                                  "symbol": "assets"
+                                },
+                                "val": {
+                                  "vec": [
+                                    {
+                                      "map": [
+                                        {
+                                          "key": {
+                                            "symbol": "amount"
+                                          },
+                                          "val": {
+                                            "i128": "500"
+                                          }
+                                        },
+                                        {
+                                          "key": {
+                                            "symbol": "asset"
+                                          },
+                                          "val": {
+                                            "address": "CCABDO7UZXYE4W6GVSEGSNNZTKSLFQGKXXQTH6OX7M7GKZ4Z6CUJNGZN"
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              }
+                            ]
                           },
                           {
-                            "i128": "500"
+                            "map": [
+                              {
+                                "key": {
+                                  "symbol": "assets"
+                                },
+                                "val": {
+                                  "vec": [
+                                    {
+                                      "map": [
+                                        {
+                                          "key": {
+                                            "symbol": "amount"
+                                          },
+                                          "val": {
+                                            "i128": "500"
+                                          }
+                                        },
+                                        {
+                                          "key": {
+                                            "symbol": "asset"
+                                          },
+                                          "val": {
+                                            "address": "CCABDO7UZXYE4W6GVSEGSNNZTKSLFQGKXXQTH6OX7M7GKZ4Z6CUJNGZN"
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              }
+                            ]
                           }
                         ]
                       }
@@ -424,6 +484,44 @@
                         "map": [
                           {
                             "key": {
+                              "symbol": "allocation"
+                            },
+                            "val": {
+                              "map": [
+                                {
+                                  "key": {
+                                    "symbol": "assets"
+                                  },
+                                  "val": {
+                                    "vec": [
+                                      {
+                                        "map": [
+                                          {
+                                            "key": {
+                                              "symbol": "amount"
+                                            },
+                                            "val": {
+                                              "i128": "500"
+                                            }
+                                          },
+                                          {
+                                            "key": {
+                                              "symbol": "asset"
+                                            },
+                                            "val": {
+                                              "address": "CCABDO7UZXYE4W6GVSEGSNNZTKSLFQGKXXQTH6OX7M7GKZ4Z6CUJNGZN"
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          },
+                          {
+                            "key": {
                               "symbol": "creation_time"
                             },
                             "val": {
@@ -531,14 +629,6 @@
                             "val": {
                               "string": ""
                             }
-                          },
-                          {
-                            "key": {
-                              "symbol": "total_amount"
-                            },
-                            "val": {
-                              "i128": "500"
-                            }
                           }
                         ]
                       }
@@ -556,6 +646,44 @@
                       },
                       "val": {
                         "map": [
+                          {
+                            "key": {
+                              "symbol": "allocation"
+                            },
+                            "val": {
+                              "map": [
+                                {
+                                  "key": {
+                                    "symbol": "assets"
+                                  },
+                                  "val": {
+                                    "vec": [
+                                      {
+                                        "map": [
+                                          {
+                                            "key": {
+                                              "symbol": "amount"
+                                            },
+                                            "val": {
+                                              "i128": "500"
+                                            }
+                                          },
+                                          {
+                                            "key": {
+                                              "symbol": "asset"
+                                            },
+                                            "val": {
+                                              "address": "CCABDO7UZXYE4W6GVSEGSNNZTKSLFQGKXXQTH6OX7M7GKZ4Z6CUJNGZN"
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          },
                           {
                             "key": {
                               "symbol": "creation_time"
@@ -664,14 +792,6 @@
                             },
                             "val": {
                               "string": ""
-                            }
-                          },
-                          {
-                            "key": {
-                              "symbol": "total_amount"
-                            },
-                            "val": {
-                              "i128": "500"
                             }
                           }
                         ]

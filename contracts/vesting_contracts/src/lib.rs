@@ -1,11 +1,45 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, token, vec, Address, Env, IntoVal, Map, Symbol, Val, Vec, String};
+use soroban_sdk::{contract, contractimpl, contracttype, token, vec, Address, Env, Map, Symbol, Vec, String};
 
 mod factory;
 pub use factory::{VestingFactory, VestingFactoryClient};
 
 // 10 years in seconds
 pub const MAX_DURATION: u64 = 315_360_000;
+
+// Maximum number of assets in a diversified vesting basket
+pub const MAX_ASSET_BASKET_SIZE: u32 = 10;
+
+#[contracttype]
+#[derive(Clone)]
+pub struct AssetAllocation {
+    pub asset: Address,
+    pub amount: i128,
+}
+
+#[contracttype]
+#[derive(Clone)]
+pub struct Allocation {
+    pub assets: Vec<AssetAllocation>,
+}
+
+impl Allocation {
+    pub fn new(env: &Env) -> Self {
+        Self { assets: Vec::new(env) }
+    }
+
+    pub fn add_asset(&mut self, _env: &Env, asset: Address, amount: i128) {
+        self.assets.push_back(AssetAllocation { asset, amount });
+    }
+
+    pub fn total_amount(&self) -> i128 {
+        let mut sum: i128 = 0;
+        for a in self.assets.iter() {
+            sum += a.amount;
+        }
+        sum
+    }
+}
 
 #[contracttype]
 pub enum WhitelistDataKey {
@@ -38,7 +72,7 @@ pub enum DataKey {
 #[contracttype]
 #[derive(Clone)]
 pub struct Vault {
-    pub total_amount: i128,
+    pub allocation: Allocation,
     pub released_amount: i128,
     pub keeper_fee: i128,
     pub staked_amount: i128,
@@ -66,7 +100,7 @@ pub struct Milestone {
 #[contracttype]
 pub struct BatchCreateData {
     pub recipients: Vec<Address>,
-    pub amounts: Vec<i128>,
+    pub allocations: Vec<Allocation>,
     pub start_times: Vec<u64>,
     pub end_times: Vec<u64>,
     pub keeper_fees: Vec<i128>,
@@ -77,7 +111,7 @@ pub struct BatchCreateData {
 pub struct VaultCreated {
     pub vault_id: u64,
     pub beneficiary: Address,
-    pub total_amount: i128,
+    pub allocation: Allocation,
     pub cliff_duration: u64,
     pub start_time: u64,
     pub title: String,
@@ -140,19 +174,19 @@ impl VestingContract {
     }
 
     pub fn create_vault_full(
-        env: Env, owner: Address, amount: i128, start_time: u64, end_time: u64,
+        env: Env, owner: Address, allocation: Allocation, start_time: u64, end_time: u64,
         keeper_fee: i128, is_revocable: bool, is_transferable: bool, step_duration: u64,
     ) -> u64 {
         Self::require_admin(&env);
-        Self::create_vault_full_internal(&env, owner, amount, start_time, end_time, keeper_fee, is_revocable, is_transferable, step_duration)
+        Self::create_vault_full_internal(&env, owner, allocation, start_time, end_time, keeper_fee, is_revocable, is_transferable, step_duration)
     }
 
     pub fn create_vault_lazy(
-        env: Env, owner: Address, amount: i128, start_time: u64, end_time: u64,
+        env: Env, owner: Address, allocation: Allocation, start_time: u64, end_time: u64,
         keeper_fee: i128, is_revocable: bool, is_transferable: bool, step_duration: u64,
     ) -> u64 {
         Self::require_admin(&env);
-        Self::create_vault_lazy_internal(&env, owner, amount, start_time, end_time, keeper_fee, is_revocable, is_transferable, step_duration)
+        Self::create_vault_lazy_internal(&env, owner, allocation, start_time, end_time, keeper_fee, is_revocable, is_transferable, step_duration)
     }
 
     pub fn batch_create_vaults_lazy(env: Env, data: BatchCreateData) -> Vec<u64> {
@@ -162,7 +196,7 @@ impl VestingContract {
             let id = Self::create_vault_lazy_internal(
                 &env,
                 data.recipients.get(i).unwrap(),
-                data.amounts.get(i).unwrap(),
+                data.allocations.get(i).unwrap(),
                 data.start_times.get(i).unwrap(),
                 data.end_times.get(i).unwrap(),
                 data.keeper_fees.get(i).unwrap(),
@@ -182,7 +216,7 @@ impl VestingContract {
             let id = Self::create_vault_full_internal(
                 &env,
                 data.recipients.get(i).unwrap(),
-                data.amounts.get(i).unwrap(),
+                data.allocations.get(i).unwrap(),
                 data.start_times.get(i).unwrap(),
                 data.end_times.get(i).unwrap(),
                 data.keeper_fees.get(i).unwrap(),
@@ -195,25 +229,53 @@ impl VestingContract {
         ids
     }
 
-    pub fn claim_tokens(env: Env, vault_id: u64, claim_amount: i128) -> i128 {
+    pub fn claim_tokens(env: Env, vault_id: u64, claim_amount: i128) -> Vec<(Address, i128)> {
+        // claim_amount is the total amount to claim (will be distributed pro-rata across basket)
         Self::require_not_paused(&env);
         let mut vault = Self::get_vault_internal(&env, vault_id);
         if vault.is_frozen { panic!("Vault frozen"); }
         if !vault.is_initialized { panic!("Vault not initialized"); }
         vault.owner.require_auth();
 
-        let vested = Self::calculate_claimable(&env, vault_id, &vault);
-        if claim_amount > (vested - vault.released_amount) {
+        if claim_amount <= 0 { panic!("Invalid claim amount"); }
+
+        let total_vested = Self::calculate_claimable(&env, vault_id, &vault);
+        let total_claimable = total_vested - vault.released_amount;
+        
+        if claim_amount > total_claimable {
             panic!("Insufficient vested tokens");
         }
 
+        // Update released amount
         vault.released_amount += claim_amount;
         env.storage().instance().set(&DataKey::VaultData(vault_id), &vault);
         
-        let token: Address = env.storage().instance().get(&DataKey::Token).expect("Token not set");
-        token::Client::new(&env, &token).transfer(&env.current_contract_address(), &vault.owner, &claim_amount);
+        // Calculate pro-rated amounts for each asset in the basket
+        let total_allocation = vault.allocation.total_amount();
+        let mut claimed_assets: Vec<(Address, i128)> = Vec::new(&env);
         
-        claim_amount
+        for asset_alloc in vault.allocation.assets.iter() {
+            // Calculate the ratio of this asset to total allocation (using basis points for precision)
+            let asset_ratio = if total_allocation > 0 {
+                (asset_alloc.amount * 10000) / total_allocation
+            } else {
+                0
+            };
+            
+            let asset_claim_amount = (claim_amount * asset_ratio) / 10000;
+            
+            if asset_claim_amount > 0 {
+                // Transfer this asset to the beneficiary
+                token::Client::new(&env, &asset_alloc.asset).transfer(
+                    &env.current_contract_address(),
+                    &vault.owner,
+                    &asset_claim_amount
+                );
+                claimed_assets.push_back((asset_alloc.asset.clone(), asset_claim_amount));
+            }
+        }
+        
+        claimed_assets
     }
 
     pub fn set_milestones(env: Env, vault_id: u64, milestones: Vec<Milestone>) {
@@ -232,7 +294,7 @@ impl VestingContract {
 
     pub fn unlock_milestone(env: Env, vault_id: u64, milestone_id: u64) {
         Self::require_admin(&env);
-        let mut milestones = Self::get_milestones(env.clone(), vault_id);
+        let milestones = Self::get_milestones(env.clone(), vault_id);
         let mut found = false;
         let mut updated = Vec::new(&env);
         for m in milestones.iter() {
@@ -347,12 +409,37 @@ impl VestingContract {
         let mut vault = Self::get_vault_internal(&env, vault_id);
         
         let vested = Self::calculate_claimable(&env, vault_id, &vault);
-        let unvested = vault.total_amount - vested;
+        let total_allocation = vault.allocation.total_amount();
+        let unvested = total_allocation - vested;
         
         if unvested <= 0 { panic!("Nothing to slash"); }
         
-        // The slashed tokens are taken from the vault's total capacity
-        vault.total_amount = vested;
+        // Store original assets and calculate transfer amounts in one pass
+        // We need to keep original asset addresses for the transfer after we modify the vault
+        let mut new_assets = Vec::new(&env);
+        let mut transfer_data: Vec<(Address, i128)> = Vec::new(&env); // (asset_address, slashed_amount)
+        
+        for asset_alloc in vault.allocation.assets.iter() {
+            let asset_ratio = if total_allocation > 0 {
+                (asset_alloc.amount * 10000) / total_allocation
+            } else {
+                0
+            };
+            let slashed_amount = (unvested * asset_ratio) / 10000;
+            let remaining = asset_alloc.amount - slashed_amount;
+            
+            // Store original asset address and amount to slash for later transfer
+            transfer_data.push_back((asset_alloc.asset.clone(), slashed_amount));
+            
+            if remaining > 0 {
+                new_assets.push_back(AssetAllocation { 
+                    asset: asset_alloc.asset.clone(), 
+                    amount: remaining 
+                });
+            }
+        }
+        vault.allocation.assets = new_assets;
+        
         // Effectively stop the clock for this vault
         vault.end_time = env.ledger().timestamp();
         vault.step_duration = 0;
@@ -368,9 +455,17 @@ impl VestingContract {
         let total_shares: i128 = env.storage().instance().get(&DataKey::TotalShares).unwrap_or(0);
         env.storage().instance().set(&DataKey::TotalShares, &(total_shares - unvested));
         
-        // Transfer to community treasury
-        let token: Address = env.storage().instance().get(&DataKey::Token).expect("Token not set");
-        token::Client::new(&env, &token).transfer(&env.current_contract_address(), &treasury, &unvested);
+        // Transfer slashed tokens to community treasury - use stored transfer data
+        for item in transfer_data.iter() {
+            let (asset_addr, slashed_amount) = (item.0.clone(), item.1);
+            if slashed_amount > 0 {
+                token::Client::new(&env, &asset_addr).transfer(
+                    &env.current_contract_address(),
+                    &treasury,
+                    &slashed_amount
+                );
+            }
+        }
         
         // Emit event
         env.events().publish((Symbol::new(&env, "slash"), vault_id), (vested, unvested, treasury));
@@ -395,14 +490,15 @@ impl VestingContract {
     }
 
     fn create_vault_full_internal(
-        env: &Env, owner: Address, amount: i128, start_time: u64, end_time: u64,
+        env: &Env, owner: Address, allocation: Allocation, start_time: u64, end_time: u64,
         keeper_fee: i128, is_revocable: bool, is_transferable: bool, step_duration: u64,
     ) -> u64 {
         Self::require_valid_duration(start_time, end_time);
         let id = Self::increment_vault_count(env);
-        Self::sub_admin_balance(env, amount);
+        let total = allocation.total_amount();
+        Self::sub_admin_balance(env, total);
         let vault = Vault {
-            total_amount: amount,
+            allocation,
             released_amount: 0,
             keeper_fee,
             staked_amount: 0,
@@ -420,19 +516,20 @@ impl VestingContract {
         };
         env.storage().instance().set(&DataKey::VaultData(id), &vault);
         Self::add_user_vault_index(env, &owner, id);
-        Self::add_total_shares(env, amount);
+        Self::add_total_shares(env, total);
         id
     }
 
     fn create_vault_lazy_internal(
-        env: &Env, owner: Address, amount: i128, start_time: u64, end_time: u64,
+        env: &Env, owner: Address, allocation: Allocation, start_time: u64, end_time: u64,
         keeper_fee: i128, is_revocable: bool, is_transferable: bool, step_duration: u64,
     ) -> u64 {
         Self::require_valid_duration(start_time, end_time);
         let id = Self::increment_vault_count(env);
-        Self::sub_admin_balance(env, amount);
+        let total = allocation.total_amount();
+        Self::sub_admin_balance(env, total);
         let vault = Vault {
-            total_amount: amount,
+            allocation,
             released_amount: 0,
             keeper_fee,
             staked_amount: 0,
@@ -449,7 +546,7 @@ impl VestingContract {
             is_frozen: false,
         };
         env.storage().instance().set(&DataKey::VaultData(id), &vault);
-        Self::add_total_shares(env, amount);
+        Self::add_total_shares(env, total);
         id
     }
 
@@ -486,7 +583,7 @@ impl VestingContract {
         let mut total_power: i128 = 0;
         for id in vault_ids.iter() {
             let vault = Self::get_vault_internal(env, id);
-            let balance = vault.total_amount - vault.released_amount;
+            let balance = vault.allocation.total_amount() - vault.released_amount;
             let weight = if vault.is_irrevocable { 100 } else { 50 };
             total_power += (balance * weight) / 100;
         }
@@ -494,6 +591,8 @@ impl VestingContract {
     }
 
     fn calculate_claimable(env: &Env, id: u64, vault: &Vault) -> i128 {
+        let total_allocation = vault.allocation.total_amount();
+        
         if env.storage().instance().has(&DataKey::VaultMilestones(id)) {
             let milestones: Vec<Milestone> = env.storage().instance().get(&DataKey::VaultMilestones(id)).expect("No milestones");
             let mut pct = 0;
@@ -501,7 +600,7 @@ impl VestingContract {
                 if m.is_unlocked { pct += m.percentage; }
             }
             if pct > 100 { pct = 100; }
-            (vault.total_amount * pct as i128) / 100
+            (total_allocation * pct as i128) / 100
         } else {
             let mut now = env.ledger().timestamp();
             let accel_pct: u32 = env.storage().instance().get(&DataKey::GlobalAccelerationPct).unwrap_or(0);
@@ -513,7 +612,7 @@ impl VestingContract {
             }
 
             if now <= vault.start_time { return 0; }
-            if now >= vault.end_time { return vault.total_amount; }
+            if now >= vault.end_time { return total_allocation; }
             
             let elapsed = (now - vault.start_time) as i128;
             
@@ -521,9 +620,9 @@ impl VestingContract {
                 let steps = duration / vault.step_duration as i128;
                 if steps == 0 { return 0; }
                 let completed = elapsed / vault.step_duration as i128;
-                (vault.total_amount * completed) / steps
+                (total_allocation * completed) / steps
             } else {
-                (vault.total_amount * elapsed) / duration
+                (total_allocation * elapsed) / duration
             }
         }
     }

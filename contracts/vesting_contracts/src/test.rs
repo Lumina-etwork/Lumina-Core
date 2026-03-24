@@ -1,5 +1,5 @@
 use crate::{
-    BatchCreateData, Milestone, VestingContract, VestingContractClient,
+    Allocation, BatchCreateData, Milestone, VestingContract, VestingContractClient,
 };
 use soroban_sdk::{
     testutils::{Address as _, Ledger},
@@ -26,6 +26,12 @@ fn setup() -> (Env, Address, VestingContractClient<'static>, Address, Address) {
     (env, contract_id, client, admin, token_addr)
 }
 
+fn create_allocation(env: &Env, token: &Address, amount: i128) -> Allocation {
+    let mut allocation = Allocation::new(env);
+    allocation.add_asset(env, token.clone(), amount);
+    allocation
+}
+
 #[test]
 fn test_initialize() {
     let (env, _, client, admin, _) = setup();
@@ -38,9 +44,11 @@ fn test_create_vault_full_and_claim() {
     let beneficiary = Address::generate(&env);
     let now = env.ledger().timestamp();
     
+    let allocation = create_allocation(&env, &token, 1000i128);
+    
     let vault_id = client.create_vault_full(
         &beneficiary,
-        &1000i128,
+        &allocation,
         &now,
         &(now + 1000),
         &0i128,
@@ -65,14 +73,16 @@ fn test_create_vault_full_and_claim() {
 
 #[test]
 fn test_periodic_vesting() {
-    let (env, _, client, _, _) = setup();
+    let (env, _, client, _, token) = setup();
     let beneficiary = Address::generate(&env);
     let now = env.ledger().timestamp();
+    
+    let allocation = create_allocation(&env, &token, 1000i128);
     
     // 1000 tokens over 1000 seconds, with 100 second steps
     let vault_id = client.create_vault_full(
         &beneficiary,
-        &1000i128,
+        &allocation,
         &now,
         &(now + 1000),
         &0i128,
@@ -92,13 +102,15 @@ fn test_periodic_vesting() {
 
 #[test]
 fn test_milestones() {
-    let (env, _, client, admin, _) = setup();
+    let (env, _, client, admin, token) = setup();
     let beneficiary = Address::generate(&env);
     let now = env.ledger().timestamp();
     
+    let allocation = create_allocation(&env, &token, 1000i128);
+    
     let vault_id = client.create_vault_full(
         &beneficiary,
-        &1000i128,
+        &allocation,
         &now,
         &(now + 1000),
         &0i128,
@@ -136,14 +148,17 @@ fn test_global_pause() {
 
 #[test]
 fn test_batch_operations() {
-    let (env, _, client, _, _) = setup();
+    let (env, _, client, _, token) = setup();
     let r1 = Address::generate(&env);
     let r2 = Address::generate(&env);
     let now = env.ledger().timestamp();
     
+    let alloc1 = create_allocation(&env, &token, 500i128);
+    let alloc2 = create_allocation(&env, &token, 500i128);
+    
     let batch = BatchCreateData {
         recipients: vec![&env, r1, r2],
-        amounts: vec![&env, 500i128, 500i128],
+        allocations: vec![&env, alloc1, alloc2],
         start_times: vec![&env, now, now],
         end_times: vec![&env, now + 1000, now + 1000],
         keeper_fees: vec![&env, 0i128, 0i128],
@@ -158,14 +173,17 @@ fn test_batch_operations() {
 
 #[test]
 fn test_voting_power() {
-    let (env, _, client, _, _) = setup();
+    let (env, _, client, _, token) = setup();
     let beneficiary = Address::generate(&env);
     let now = env.ledger().timestamp();
+    
+    let alloc1 = create_allocation(&env, &token, 1000i128);
+    let alloc2 = create_allocation(&env, &token, 1000i128);
     
     // Irrevocable vault: 1000 tokens (100% weight = 1000 power)
     client.create_vault_full(
         &beneficiary,
-        &1000i128,
+        &alloc1,
         &now,
         &(now + 1000),
         &0i128,
@@ -177,7 +195,7 @@ fn test_voting_power() {
     // Revocable vault: 1000 tokens (50% weight = 500 power)
     client.create_vault_full(
         &beneficiary,
-        &1000i128,
+        &alloc2,
         &now,
         &(now + 1000),
         &0i128,
@@ -192,16 +210,19 @@ fn test_voting_power() {
 
 #[test]
 fn test_delegated_voting_power() {
-    let (env, _, client, _, _) = setup();
+    let (env, _, client, _, token) = setup();
     let beneficiary_a = Address::generate(&env);
     let beneficiary_b = Address::generate(&env);
     let representative = Address::generate(&env);
     let now = env.ledger().timestamp();
     
+    let alloc_a = create_allocation(&env, &token, 1000i128);
+    let alloc_b = create_allocation(&env, &token, 1000i128);
+    
     // A: 1000 power (irrevocable)
     client.create_vault_full(
         &beneficiary_a,
-        &1000i128,
+        &alloc_a,
         &now,
         &(now + 1000),
         &0i128,
@@ -213,7 +234,7 @@ fn test_delegated_voting_power() {
     // B: 500 power (revocable)
     client.create_vault_full(
         &beneficiary_b,
-        &1000i128,
+        &alloc_b,
         &now,
         &(now + 1000),
         &0i128,
@@ -251,14 +272,16 @@ fn test_delegated_voting_power() {
 
 #[test]
 fn test_vesting_acceleration() {
-    let (env, _, client, _admin, _) = setup();
+    let (env, _, client, _admin, token) = setup();
     let beneficiary = Address::generate(&env);
     let now = env.ledger().timestamp();
+    
+    let allocation = create_allocation(&env, &token, 1000i128);
     
     // 1000 tokens over 1000 seconds
     let vault_id = client.create_vault_full(
         &beneficiary,
-        &1000i128,
+        &allocation,
         &now,
         &(now + 1000),
         &0i128,
@@ -294,10 +317,12 @@ fn test_slashing() {
     let token_client = token::Client::new(&env, &token);
     let now = env.ledger().timestamp();
     
+    let allocation = create_allocation(&env, &token, 1000i128);
+    
     // 1000 tokens over 1000 seconds
     let vault_id = client.create_vault_full(
         &beneficiary,
-        &1000i128,
+        &allocation,
         &now,
         &(now + 1000),
         &0i128,
@@ -319,9 +344,9 @@ fn test_slashing() {
     // Beneficiary should still have 400 vested
     assert_eq!(client.get_claimable_amount(&vault_id), 400);
     
-    // vault.total_amount should be 400
+    // vault.allocation.total_amount() should be 400
     let vault = client.get_vault(&vault_id);
-    assert_eq!(vault.total_amount, 400);
+    assert_eq!(vault.allocation.total_amount(), 400);
     
     // Jump to T=1000, claimable should NOT increase
     env.ledger().set_timestamp(now + 1000);

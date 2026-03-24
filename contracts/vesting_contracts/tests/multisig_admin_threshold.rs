@@ -4,10 +4,19 @@ use soroban_sdk::testutils::{Address as _, Ledger as _};
 use soroban_sdk::xdr;
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, Address, Env, IntoVal, Map, Symbol, Val,
-    Vec,
+    Vec, String,
 };
 
-use vesting_contracts::{VestingContract, VestingContractClient};
+use vesting_contracts::{Allocation, VestingContract, VestingContractClient};
+
+fn create_allocation(env: &Env, amount: i128) -> Allocation {
+    // Use a valid Stellar address for the asset in this test
+    // This is needed because the authorization entry must match the actual call arguments
+    let dummy_asset = Address::from_string(&String::from_str(env, "GDGQVOKHW4VEJRU2TETD6DBRKEO5ERCNF353LW5WBFW3JJWQ2BRQ6KDD"));
+    let mut allocation = Allocation::new(env);
+    allocation.add_asset(env, dummy_asset, amount);
+    allocation
+}
 
 #[contract]
 struct MultisigAccount;
@@ -171,9 +180,10 @@ fn create_vault_succeeds_with_multisig_admin_threshold_met() {
     let step_duration = 0u64;
 
     // Provide an authorization entry for the multisig admin where signatures contain >= threshold signers.
+    let allocation = create_allocation(&env, amount);
     let args: Vec<Val> = (
         beneficiary.clone(),
-        amount,
+        allocation,
         start,
         end,
         keeper_fee,
@@ -195,7 +205,7 @@ fn create_vault_succeeds_with_multisig_admin_threshold_met() {
 
     let vault_id = vesting.create_vault_full(
         &beneficiary,
-        &amount,
+        &create_allocation(&env, amount),
         &start,
         &end,
         &keeper_fee,
@@ -238,9 +248,10 @@ fn create_vault_panics_when_multisig_threshold_not_met() {
     let step_duration = 0u64;
 
     // Only one signer provided, but threshold is 2.
+    let allocation = create_allocation(&env, amount);
     let args: Vec<Val> = (
         beneficiary.clone(),
-        amount,
+        allocation,
         start,
         end,
         keeper_fee,
@@ -262,7 +273,7 @@ fn create_vault_panics_when_multisig_threshold_not_met() {
 
     vesting.create_vault_full(
         &beneficiary,
-        &amount,
+        &create_allocation(&env, amount),
         &start,
         &end,
         &keeper_fee,
