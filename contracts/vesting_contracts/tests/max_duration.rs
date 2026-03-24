@@ -1,6 +1,6 @@
 use soroban_sdk::{testutils::Address as _, vec, Address, Env};
 
-use vesting_contracts::{BatchCreateData, VestingContract, VestingContractClient, MAX_DURATION};
+use vesting_contracts::{Allocation, BatchCreateData, VestingContract, VestingContractClient, MAX_DURATION};
 
 fn setup(env: &Env) -> (VestingContractClient<'static>, Address) {
     env.mock_all_auths();
@@ -14,6 +14,13 @@ fn setup(env: &Env) -> (VestingContractClient<'static>, Address) {
     (client, admin)
 }
 
+fn create_allocation(env: &Env, amount: i128) -> Allocation {
+    let dummy_asset = Address::generate(env);
+    let mut allocation = Allocation::new(env);
+    allocation.add_asset(env, dummy_asset, amount);
+    allocation
+}
+
 #[test]
 fn create_vault_full_allows_max_duration() {
     let env = Env::default();
@@ -25,7 +32,7 @@ fn create_vault_full_allows_max_duration() {
 
     client.create_vault_full(
         &beneficiary,
-        &1_000i128,
+        &create_allocation(&env, 1_000i128),
         &start,
         &end,
         &0i128,
@@ -47,7 +54,7 @@ fn create_vault_full_rejects_over_max_duration() {
 
     client.create_vault_full(
         &beneficiary,
-        &1_000i128,
+        &create_allocation(&env, 1_000i128),
         &start,
         &end,
         &0i128,
@@ -69,7 +76,7 @@ fn create_vault_lazy_rejects_over_max_duration() {
 
     client.create_vault_lazy(
         &beneficiary,
-        &1_000i128,
+        &create_allocation(&env, 1_000i128),
         &start,
         &end,
         &0i128,
@@ -91,7 +98,7 @@ fn batch_create_vaults_rejects_over_max_duration() {
 
     let batch = BatchCreateData {
         recipients: vec![&env, recipient],
-        amounts: vec![&env, 1_000i128],
+        allocations: vec![&env, create_allocation(&env, 1_000i128)],
         start_times: vec![&env, start],
         end_times: vec![&env, end],
         keeper_fees: vec![&env, 0i128],

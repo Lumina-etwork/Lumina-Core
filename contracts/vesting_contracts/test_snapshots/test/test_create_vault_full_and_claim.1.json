@@ -99,7 +99,37 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
                 },
                 {
-                  "i128": "1000"
+                  "map": [
+                    {
+                      "key": {
+                        "symbol": "assets"
+                      },
+                      "val": {
+                        "vec": [
+                          {
+                            "map": [
+                              {
+                                "key": {
+                                  "symbol": "amount"
+                                },
+                                "val": {
+                                  "i128": "1000"
+                                }
+                              },
+                              {
+                                "key": {
+                                  "symbol": "asset"
+                                },
+                                "val": {
+                                  "address": "CCABDO7UZXYE4W6GVSEGSNNZTKSLFQGKXXQTH6OX7M7GKZ4Z6CUJNGZN"
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  ]
                 },
                 {
                   "u64": "0"
@@ -360,6 +390,44 @@
                         "map": [
                           {
                             "key": {
+                              "symbol": "allocation"
+                            },
+                            "val": {
+                              "map": [
+                                {
+                                  "key": {
+                                    "symbol": "assets"
+                                  },
+                                  "val": {
+                                    "vec": [
+                                      {
+                                        "map": [
+                                          {
+                                            "key": {
+                                              "symbol": "amount"
+                                            },
+                                            "val": {
+                                              "i128": "1000"
+                                            }
+                                          },
+                                          {
+                                            "key": {
+                                              "symbol": "asset"
+                                            },
+                                            "val": {
+                                              "address": "CCABDO7UZXYE4W6GVSEGSNNZTKSLFQGKXXQTH6OX7M7GKZ4Z6CUJNGZN"
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          },
+                          {
+                            "key": {
                               "symbol": "creation_time"
                             },
                             "val": {
@@ -466,14 +534,6 @@
                             },
                             "val": {
                               "string": ""
-                            }
-                          },
-                          {
-                            "key": {
-                              "symbol": "total_amount"
-                            },
-                            "val": {
-                              "i128": "1000"
                             }
                           }
                         ]

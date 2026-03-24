@@ -1,4 +1,4 @@
-use crate::{VestingContract, VestingContractClient, Milestone, BatchCreateData};
+use crate::{Allocation, VestingContract, VestingContractClient, Milestone, BatchCreateData};
 use soroban_sdk::{testutils::{Address as _, Ledger}, token, vec, Address, Env};
 use proptest::prelude::*;
 
@@ -21,17 +21,25 @@ fn setup_env() -> (Env, Address, VestingContractClient<'static>, Address, Addres
     (env, contract_id, client, admin, token_addr)
 }
 
+fn create_allocation(env: &Env, token: &Address, amount: i128) -> Allocation {
+    let mut allocation = Allocation::new(env);
+    allocation.add_asset(env, token.clone(), amount);
+    allocation
+}
+
 #[test]
 fn test_math_invariant_linear() {
-    let (env, _, client, _, _) = setup_env();
+    let (env, _, client, _, token) = setup_env();
     let beneficiary = Address::generate(&env);
     let start = 1000u64;
     let end = 5000u64;
     let amount = 1_000_000i128;
     
+    let allocation = create_allocation(&env, &token, amount);
+    
     let vault_id = client.create_vault_full(
         &beneficiary,
-        &amount,
+        &allocation,
         &start,
         &end,
         &0i128,
@@ -45,17 +53,18 @@ fn test_math_invariant_linear() {
         env.ledger().set_timestamp(t);
         let claimable = client.get_claimable_amount(&vault_id);
         let vault = client.get_vault(&vault_id);
+        let total = vault.allocation.total_amount();
         
         // Invariant 1: claimable + released <= total
-        assert!(claimable + vault.released_amount <= vault.total_amount, 
-            "Invariant 1 failed at t={}: {} + {} > {}", t, claimable, vault.released_amount, vault.total_amount);
+        assert!(claimable + vault.released_amount <= total, 
+            "Invariant 1 failed at t={}: {} + {} > {}", t, claimable, vault.released_amount, total);
         
         // Invariant 2: claimable >= 0
         assert!(claimable >= 0, "Invariant 2 failed at t={}", t);
         
         // Invariant 3: at end_time, everything is claimable
         if t >= end {
-            assert_eq!(claimable + vault.released_amount, vault.total_amount, "Invariant 3 failed at t={}", t);
+            assert_eq!(claimable + vault.released_amount, total, "Invariant 3 failed at t={}", t);
         }
     }
 }
@@ -86,9 +95,11 @@ proptest! {
         let start = 10000u64;
         let end = start + duration;
         
+        let allocation = create_allocation(&env, &token_addr, amount);
+        
         let vault_id = client.create_vault_full(
             &beneficiary,
-            &amount,
+            &allocation,
             &start,
             &end,
             &0i128,
