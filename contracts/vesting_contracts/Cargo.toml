@@ -12,16 +12,8 @@ doctest = false
 name = "test"
 path = "src/test.rs"
 
-[[bin]]
-name = "invariant_tests"
-path = "src/invariant_tests.rs"
-
 [dependencies]
 soroban-sdk = { workspace = true }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
-
-[[bench]]
-name = "lazy_vs_full"
-harness = false
