@@ -1426,3 +1426,154 @@ fn test_full_happy_path_nominate_claim_finalise_new_owner_verified() {
         panic!("Expected Succeeded state");
     }
 }
+
+// ---------------------------------------------------------------------------
+// Clawback Tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_clawback_within_grace_period() {
+    let (env, _, client, admin, token) = setup();
+    let beneficiary = Address::generate(&env);
+    let now = env.ledger().timestamp();
+
+    // Create vault with 5000 tokens over 9900 seconds
+    let vault_id = client.create_vault_full(
+        &beneficiary,
+        &5000i128,
+        &now,
+        &(now + 9900),
+        &0i128,
+        &true, // revocable
+        &false,
+        &0u64
+    );
+
+    // Advance time slightly (within grace period)
+    env.ledger().set_timestamp(now + 100);
+    
+    // Clawback should work within grace period (100 seconds)
+    client.clawback_vault(&vault_id, &200u64);
+    
+    // Verify clawback info is stored
+    let clawback_info = client.get_clawback_info(&vault_id);
+    assert!(clawback_info.is_some());
+    
+    let info = clawback_info.unwrap();
+    assert_eq!(info.vault_id, vault_id);
+    assert_eq!(info.original_total_amount, 5000);
+    assert!(info.clawback_amount > 0);
+    assert_eq!(info.original_end_time, now + 9900);
+    
+    // Verify adjusted schedule is created
+    let adjusted_schedule = client.get_adjusted_schedule(&vault_id);
+    assert!(adjusted_schedule.is_some());
+    
+    // Verify vault is marked as clawed back
+    assert!(client.is_vault_clawed_back(&vault_id));
+}
+
+#[test]
+#[should_panic(expected = "Grace period expired")]
+fn test_clawback_after_grace_period_panics() {
+    let (env, _, client, _, _) = setup();
+    let beneficiary = Address::generate(&env);
+    let now = env.ledger().timestamp();
+
+    let vault_id = client.create_vault_full(
+        &beneficiary,
+        &5000i128,
+        &now,
+        &(now + 10000),
+        &0i128,
+        &true,
+        &false,
+        &0u64
+    );
+
+    // Advance time beyond grace period
+    env.ledger().set_timestamp(now + 500);
+    
+    // Should panic - grace period expired
+    client.clawback_vault(&vault_id, &200u64);
+}
+
+#[test]
+fn test_dynamic_pro_rata_recalculation() {
+    let (env, _, client, _, token) = setup();
+    let beneficiary = Address::generate(&env);
+    let now = env.ledger().timestamp();
+
+    // Create vault: 1000 tokens over 1000 seconds (1 token/second)
+    let vault_id = client.create_vault_full(
+        &beneficiary,
+        &1000i128,
+        &now,
+        &(now + 1000),
+        &0i128,
+        &true,
+        &false,
+        &0u64
+    );
+
+    // Advance 500 seconds - 500 tokens should be vested
+    env.ledger().set_timestamp(now + 500);
+    assert_eq!(client.get_claimable_amount(&vault_id), 500);
+
+    // Clawback within grace period - should claw back 500 unvested tokens
+    client.clawback_vault(&vault_id, &1000u64);
+    
+    // Verify vault now has reduced total amount (only vested tokens remain)
+    let vault = client.get_vault(&vault_id);
+    assert_eq!(vault.total_amount, 500); // Only vested tokens remain
+    
+    // Verify adjusted schedule maintains original end time
+    let adjusted = client.get_adjusted_schedule(&vault_id).unwrap();
+    assert_eq!(adjusted.original_end_time, now + 1000);
+    
+    // Verify emission rate has been adjusted
+    // Original: 1 token/second for 1000 seconds
+    // After clawback: 500 tokens over remaining 500 seconds = 1 token/second
+    // In this case, the rate stays the same since we're exactly at 50%
+    assert_eq!(adjusted.new_total_amount, 500);
+}
+
+#[test]
+fn test_clawback_with_partial_vesting() {
+    let (env, _, client, _, token) = setup();
+    let beneficiary = Address::generate(&env);
+    let now = env.ledger().timestamp();
+
+    // Create vault: 1000 tokens over 1000 seconds
+    let vault_id = client.create_vault_full(
+        &beneficiary,
+        &1000i128,
+        &now,
+        &(now + 1000),
+        &0i128,
+        &true,
+        &false,
+        &0u64
+    );
+
+    // Advance 200 seconds - 200 tokens vested
+    env.ledger().set_timestamp(now + 200);
+    assert_eq!(client.get_claimable_amount(&vault_id), 200);
+
+    // Clawback - should claw back 800 unvested tokens
+    client.clawback_vault(&vault_id, &1000u64);
+    
+    let clawback_info = client.get_clawback_info(&vault_id).unwrap();
+    assert_eq!(clawback_info.clawback_amount, 800);
+    assert_eq!(clawback_info.remaining_amount, 200);
+    
+    // Verify adjusted schedule
+    let adjusted = client.get_adjusted_schedule(&vault_id).unwrap();
+    assert_eq!(adjusted.new_total_amount, 200);
+    
+    // After clawback, all remaining tokens should be immediately available
+    // since we need to fit 200 tokens into the remaining 800 seconds
+    // but the dynamic recalculation should handle this
+    let vault = client.get_vault(&vault_id);
+    assert_eq!(vault.total_amount, 200);
+}

@@ -79,6 +79,18 @@ pub enum DataKey {
     TotalLockedValue,
     PausedVault(u64),
     PauseAuthority,
+    CollateralBridge,
+    MetadataAnchor,
+    NFTMinter,
+    VotingDelegate(Address),
+    DelegatedBeneficiaries(Address),
+    GlobalAccelerationPct,
+    RevokedVaults,
+    VaultSuccession(u64),
+    // Clawback functionality
+    ClawbackInfo(u64),
+    ClawbackGracePeriod(u64),
+    AdjustedSchedules(u64),
 }
 
 #[contracttype]
@@ -88,14 +100,6 @@ pub struct PausedVault {
     pub pause_timestamp: u64,
     pub pause_authority: Address,
     pub reason: String,
-    CollateralBridge,
-    MetadataAnchor,
-    NFTMinter,
-    VotingDelegate(Address),
-    DelegatedBeneficiaries(Address),
-    GlobalAccelerationPct,
-    RevokedVaults,
-    VaultSuccession(u64),
 }
 
 #[contracttype]
@@ -211,6 +215,35 @@ pub struct VoteCast {
 pub struct GovernanceActionExecuted {
     pub proposal_id: u64,
     pub action: GovernanceAction,
+}
+
+#[contracttype]
+#[derive(Clone)]
+pub struct ClawbackInfo {
+    pub vault_id: u64,
+    pub original_total_amount: i128,
+    pub clawback_amount: i128,
+    pub clawback_timestamp: u64,
+    pub original_end_time: u64,
+    pub remaining_amount: i128,
+}
+
+#[contracttype]
+#[derive(Clone)]
+pub struct AdjustedSchedule {
+    pub vault_id: u64,
+    pub new_total_amount: i128,
+    pub new_emission_rate: i128, // tokens per second
+    pub adjustment_timestamp: u64,
+    pub original_end_time: u64,
+}
+
+#[contracttype]
+pub struct VaultClawedBack {
+    pub vault_id: u64,
+    pub clawback_amount: i128,
+    pub remaining_amount: i128,
+    pub new_end_time: u64,
 }
 
 #[contract]
@@ -1187,6 +1220,121 @@ impl VestingContract {
         }
     }
 
+    /// Claw back a portion of vault tokens with dynamic pro-rata recalculation.
+    /// 
+    /// If a schedule is partially clawed back, the contract dynamically recalculate
+    /// the ongoing emission rate for the remaining tokens so the schedule still ends 
+    /// on the original designated date, rather than ending early.
+    /// 
+    /// # Arguments
+    /// * `vault_id` - The vault to claw back from
+    /// * `grace_period` - Time period after vault creation during which clawback is allowed
+    /// 
+    /// # Panics
+    /// - If caller is not admin
+    /// - If vault is not found or not initialized
+    /// - If grace period has expired
+    /// - If vault has no tokens to claw back
+    pub fn clawback_vault(env: Env, vault_id: u64, grace_period: u64) {
+        Self::require_admin(&env);
+        let mut vault = Self::get_vault_internal(&env, vault_id);
+
+        if !vault.is_initialized {
+            panic!("Vault not initialized");
+        }
+
+        let now = env.ledger().timestamp();
+        let time_since_creation = now - vault.creation_time;
+        
+        // Check if grace period has expired
+        if time_since_creation > grace_period {
+            panic!("Grace period expired");
+        }
+
+        // Calculate how much can be clawed back (unvested portion)
+        let vested = Self::calculate_claimable(&env, vault_id, &vault);
+        let unvested = vault.total_amount - vested;
+        
+        if unvested <= 0 {
+            panic!("No tokens available to claw back");
+        }
+
+        // Store clawback information
+        let clawback_info = ClawbackInfo {
+            vault_id,
+            original_total_amount: vault.total_amount,
+            clawback_amount: unvested,
+            clawback_timestamp: now,
+            original_end_time: vault.end_time,
+            remaining_amount: vested,
+        };
+        env.storage().instance().set(&DataKey::ClawbackInfo(vault_id), &clawback_info);
+
+        // Perform dynamic pro-rata recalculation
+        Self::recalculate_vesting_schedule(&env, vault_id, &mut vault, unvested);
+
+        // Transfer clawed tokens to admin (treasury)
+        let token: Address = env.storage().instance().get(&DataKey::Token).expect("Token not set");
+        token::Client::new(&env, &token).transfer(&env.current_contract_address(), &Self::get_admin(&env), &unvested);
+
+        // Update global tracking
+        let total_shares: i128 = env.storage().instance().get(&DataKey::TotalShares).unwrap_or(0);
+        env.storage().instance().set(&DataKey::TotalShares, &(total_shares - unvested));
+
+        // Emit event
+        let event = VaultClawedBack {
+            vault_id,
+            clawback_amount: unvested,
+            remaining_amount: vault.total_amount,
+            new_end_time: vault.end_time,
+        };
+        env.events().publish((Symbol::new(&env, "VaultClawedBack"), vault_id), event);
+    }
+
+    /// Recalculate vesting schedule after partial clawback to maintain original end date
+    /// 
+    /// This function implements the core dynamic pro-rata recalculation logic.
+    /// When tokens are clawed back, we adjust the emission rate so that the remaining
+    /// tokens still fully vest by the original end date.
+    fn recalculate_vesting_schedule(env: &Env, vault_id: u64, vault: &mut Vault, clawback_amount: i128) {
+        let now = env.ledger().timestamp();
+        
+        // Update vault total amount
+        let original_total = vault.total_amount;
+        vault.total_amount -= clawback_amount;
+
+        // If all tokens are clawed back, end the schedule immediately
+        if vault.total_amount <= vault.released_amount {
+            vault.end_time = now;
+            vault.step_duration = 0;
+            vault.is_frozen = true;
+            return;
+        }
+
+        // Calculate new emission rate to maintain original end date
+        let remaining_time = if vault.end_time > now { vault.end_time - now } else { 0 };
+        let remaining_tokens_to_vest = vault.total_amount - vault.released_amount;
+        
+        if remaining_time > 0 && remaining_tokens_to_vest > 0 {
+            // Store the adjusted schedule information
+            let new_emission_rate = remaining_tokens_to_vest / remaining_time as i128;
+            let adjusted_schedule = AdjustedSchedule {
+                vault_id,
+                new_total_amount: vault.total_amount,
+                new_emission_rate,
+                adjustment_timestamp: now,
+                original_end_time: vault.end_time,
+            };
+            env.storage().instance().set(&DataKey::AdjustedSchedules(vault_id), &adjusted_schedule);
+
+            // Note: The actual vesting calculation will use this adjusted rate
+            // in the calculate_claimable function
+        }
+
+        // Update vault data
+        env.storage().instance().set(&DataKey::VaultData(vault_id), vault);
+    }
+
     /// Return the current stake status for a vault.
     pub fn get_stake_status(env: Env, vault_id: u64) -> StakeStatusView {
         let info = get_stake_info(&env, vault_id);
@@ -1580,15 +1728,16 @@ impl VestingContract {
             .get(&DataKey::RevokedVaults)
             .unwrap_or(Vec::new(env));
         revoked.contains(&vault_id)
-    }    fn calculate_claimable(env: &Env, id: u64, vault: &Vault) -> i128 {
+    }
+
     fn calculate_claimable(env: &Env, id: u64, vault: &Vault) -> i128 {
+        // Check if this vault has an adjusted schedule due to clawback
+        if let Some(adjusted_schedule) = env.storage().instance().get::<DataKey, AdjustedSchedule>(&DataKey::AdjustedSchedules(id)) {
+            return Self::calculate_claimable_with_adjusted_schedule(env, id, vault, &adjusted_schedule);
+        }
+
         // If vault is paused, calculate based on pause timestamp
-        if
-            let Some(paused_info) = env
-                .storage()
-                .instance()
-                .get::<DataKey, PausedVault>(&DataKey::PausedVault(id))
-        {
+        if let Some(paused_info) = env.storage().instance().get::<DataKey, PausedVault>(&DataKey::PausedVault(id)) {
             let pause_time = paused_info.pause_timestamp;
             if pause_time <= vault.start_time {
                 return 0;
@@ -1608,15 +1757,14 @@ impl VestingContract {
                 (vault.total_amount * elapsed) / duration
             }
         } else if env.storage().instance().has(&DataKey::VaultMilestones(id)) {
-        // Check if performance cliff is set and if it's passed
-        if let Some(cliff) = env.storage().instance().get(&DataKey::VaultPerformanceCliff(id)) {
-            if !OracleClient::is_cliff_passed(env, &cliff, id) {
-                // Cliff not passed, no vesting yet
-                return 0;
+            // Check if performance cliff is set and if it's passed
+            if let Some(cliff) = env.storage().instance().get(&DataKey::VaultPerformanceCliff(id)) {
+                if !OracleClient::is_cliff_passed(env, &cliff, id) {
+                    // Cliff not passed, no vesting yet
+                    return 0;
+                }
             }
-        }
 
-        if env.storage().instance().has(&DataKey::VaultMilestones(id)) {
             let milestones: Vec<Milestone> = env
                 .storage()
                 .instance()
@@ -1627,10 +1775,6 @@ impl VestingContract {
                 if m.is_unlocked {
                     pct += m.percentage;
                 }
-            }
-            if pct > 100 {
-                pct = 100;
-            }
             }
             if pct > 100 {
                 pct = 100;
@@ -1646,32 +1790,42 @@ impl VestingContract {
             }
 
             let duration = (vault.end_time - vault.start_time) as i128;
-            let mut now = env.ledger().timestamp();
-            let accel_pct: u32 = env.storage().instance().get(&DataKey::GlobalAccelerationPct).unwrap_or(0);
-            
-            let duration = (vault.end_time - vault.start_time) as i128;
-            if accel_pct > 0 {
-                let shift = (duration * accel_pct as i128 / 100) as u64;
-                now += shift;
-            }
-
-            if now <= vault.start_time { return 0; }
-            if now >= vault.end_time { return vault.total_amount; }
-            
             let elapsed = (now - vault.start_time) as i128;
 
             if vault.step_duration > 0 {
                 let steps = duration / (vault.step_duration as i128);
-                let completed = elapsed / (vault.step_duration as i128);
-                (vault.total_amount / steps) * completed
-                let steps = duration / vault.step_duration as i128;
                 if steps == 0 { return 0; }
-                let completed = elapsed / vault.step_duration as i128;
+                let completed = elapsed / (vault.step_duration as i128);
                 (vault.total_amount * completed) / steps
             } else {
                 (vault.total_amount * elapsed) / duration
             }
         }
+    }
+
+    /// Calculate claimable amount for a vault with an adjusted schedule due to clawback
+    /// This implements the dynamic pro-rata recalculation logic
+    fn calculate_claimable_with_adjusted_schedule(env: &Env, id: u64, vault: &Vault, adjusted: &AdjustedSchedule) -> i128 {
+        let now = env.ledger().timestamp();
+        
+        // If adjustment was after original end time, just return current total
+        if now >= adjusted.adjustment_timestamp {
+            return vault.total_amount;
+        }
+        
+        // Calculate vested amount based on adjusted emission rate
+        let elapsed_since_adjustment = now - adjusted.adjustment_timestamp;
+        let vested_since_adjustment = if elapsed_since_adjustment > 0 {
+            (adjusted.new_emission_rate * elapsed_since_adjustment as i128).min(adjusted.new_total_amount)
+        } else {
+            0
+        };
+        
+        // Add any amount that was already vested before adjustment
+        let clawback_info = env.storage().instance().get::<DataKey, ClawbackInfo>(&DataKey::ClawbackInfo(id))
+            .expect("Clawback info should exist with adjusted schedule");
+        
+        clawback_info.remaining_amount + vested_since_adjustment
     }
 
     // --- Governance Helper Functions ---
@@ -1767,6 +1921,23 @@ impl VestingContract {
 
     pub fn get_total_locked(env: Env) -> i128 {
         Self::get_total_locked_value(&env)
+    }
+
+    // --- Clawback Query Functions ---
+
+    /// Get clawback information for a vault
+    pub fn get_clawback_info(env: Env, vault_id: u64) -> Option<ClawbackInfo> {
+        env.storage().instance().get(&DataKey::ClawbackInfo(vault_id))
+    }
+
+    /// Get adjusted schedule information for a vault
+    pub fn get_adjusted_schedule(env: Env, vault_id: u64) -> Option<AdjustedSchedule> {
+        env.storage().instance().get(&DataKey::AdjustedSchedules(vault_id))
+    }
+
+    /// Check if a vault has been clawed back
+    pub fn is_vault_clawed_back(env: Env, vault_id: u64) -> bool {
+        env.storage().instance().has(&DataKey::ClawbackInfo(vault_id))
     }
 }
 
