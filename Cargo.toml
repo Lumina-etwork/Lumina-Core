@@ -2,6 +2,7 @@
 members = [
     "contracts/vesting_contracts",
     "contracts/grant_contracts",
+    "contracts/vesting_nft_wrapper",
 ]
 resolver = "2"
 
