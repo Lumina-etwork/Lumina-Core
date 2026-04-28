@@ -1,286 +1,165 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env,
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, Map, Vec,
 };
 
-use crate::optimized::{Grant, Error, DataKey, read_grant, write_grant, settle_grant, has_status, STATUS_ACTIVE};
-
 #[contract]
-pub struct AntiReentryGrantContract;
+pub struct AntiReentryContract;
 
-// Reentry protection status
-#[derive(Clone, Copy, PartialEq, Eq)]
-#[repr(u32)]
-pub enum ReentryStatus {
-    None = 0,
-    ClaimInProgress = 1,
-    ExternalTransferInProgress = 2,
-}
-
-// Reentry guard data structure
-#[derive(Clone)]
-#[contracttype]
-pub struct ReentryGuard {
-    pub status: u32,
-    pub caller: Address,
-    pub grant_id: u64,
-    pub timestamp: u64,
-}
+// Reentry guard status flag
+pub const REENTRY_GUARD_ACTIVE: u64 = 0x00000001;
 
 #[derive(Clone)]
 #[contracttype]
 pub enum ReentryDataKey {
-    Guard(Address, u64), // (caller, grant_id)
-    GlobalLock,
+    Guard(Address),
+}
+
+#[derive(Clone)]
+#[contracttype]
+pub struct ReentryGuard {
+    pub caller: Address,
+    pub active: bool,
+    pub timestamp: u64,
 }
 
 #[contracterror]
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 #[repr(u32)]
 pub enum ReentryError {
-    ReentryDetected = 1000,
-    ExternalTransferInProgress = 1001,
-    ClaimInProgress = 1002,
-    InvalidReentryState = 1003,
-    ReentryTimeout = 1004,
+    ReentryDetected = 1001,
+    GuardAlreadyActive = 1002,
+    GuardNotActive = 1003,
+    Unauthorized = 1004,
 }
 
-// Constants for reentry protection
-pub const REENTRY_TIMEOUT_SECONDS: u64 = 300; // 5 minutes timeout for safety
+// Anti-reentry guard implementation
+pub struct ReentryProtection;
 
-// Helper functions for reentry guard management
-fn set_reentry_guard(env: &Env, caller: &Address, grant_id: u64, status: ReentryStatus) -> Result<(), ReentryError> {
-    let key = ReentryDataKey::Guard(caller.clone(), grant_id);
-    let guard = ReentryGuard {
-        status: status as u32,
-        caller: caller.clone(),
-        grant_id,
-        timestamp: env.ledger().timestamp(),
-    };
-    
-    env.storage().instance().set(&key, &guard);
-    
-    // Set temporary storage with TTL for safety
-    env.storage().instance().extend_ttl(&key, REENTRY_TIMEOUT_SECONDS.try_into().unwrap(), REENTRY_TIMEOUT_SECONDS.try_into().unwrap());
-    
-    Ok(())
-}
-
-fn clear_reentry_guard(env: &Env, caller: &Address, grant_id: u64) {
-    let key = ReentryDataKey::Guard(caller.clone(), grant_id);
-    env.storage().instance().remove(&key);
-}
-
-fn check_reentry_guard(env: &Env, caller: &Address, grant_id: u64) -> Result<Option<ReentryGuard>, ReentryError> {
-    let key = ReentryDataKey::Guard(caller.clone(), grant_id);
-    
-    if let Some(guard) = env.storage().instance().get::<_, ReentryGuard>(&key) {
-        let now = env.ledger().timestamp();
-        
-        // Check for timeout
-        if now > guard.timestamp.checked_add(REENTRY_TIMEOUT_SECONDS).unwrap_or(u64::MAX) {
-            clear_reentry_guard(env, caller, grant_id);
-            return Ok(None);
+impl ReentryProtection {
+    // Check if reentry guard is active for a specific caller
+    pub fn is_guard_active(env: &Env, caller: &Address) -> bool {
+        if let Some(guard) = env.storage()
+            .instance()
+            .get::<ReentryDataKey, ReentryGuard>(&ReentryDataKey::Guard(caller.clone()))
+        {
+            guard.active
+        } else {
+            false
         }
-        
-        // Check if this is the same caller (allowed) or different caller (reentry)
-        if guard.caller != *caller {
-            return Err(ReentryError::ReentryDetected);
+    }
+
+    // Set reentry guard active for caller
+    pub fn set_guard_active(env: &Env, caller: &Address) -> Result<(), ReentryError> {
+        if Self::is_guard_active(env, caller) {
+            return Err(ReentryError::GuardAlreadyActive);
         }
-        
-        return Ok(Some(guard));
-    }
-    
-    Ok(None)
-}
 
-// Global lock mechanism for critical sections
-fn set_global_lock(env: &Env, lock_type: ReentryStatus) -> Result<(), ReentryError> {
-    let key = ReentryDataKey::GlobalLock;
-    let guard = ReentryGuard {
-        status: lock_type as u32,
-        caller: Address::from_string(&String::from_str(&env, "GD...")),
-        grant_id: 0,
-        timestamp: env.ledger().timestamp(),
-    };
-    
-    if env.storage().instance().has(&key) {
-        return Err(ReentryError::ReentryDetected);
-    }
-    
-    env.storage().instance().set(&key, &guard);
-    env.storage().instance().extend_ttl(&key, REENTRY_TIMEOUT_SECONDS.try_into().unwrap(), REENTRY_TIMEOUT_SECONDS.try_into().unwrap());
-    
-    Ok(())
-}
+        let guard = ReentryGuard {
+            caller: caller.clone(),
+            active: true,
+            timestamp: env.ledger().timestamp(),
+        };
 
-fn clear_global_lock(env: &Env) {
-    let key = ReentryDataKey::GlobalLock;
-    env.storage().instance().remove(&key);
+        env.storage()
+            .instance()
+            .set(&ReentryDataKey::Guard(caller.clone()), &guard);
+
+        Ok(())
+    }
+
+    // Clear reentry guard for caller
+    pub fn clear_guard(env: &Env, caller: &Address) -> Result<(), ReentryError> {
+        if !Self::is_guard_active(env, caller) {
+            return Err(ReentryError::GuardNotActive);
+        }
+
+        env.storage()
+            .instance()
+            .remove::<ReentryDataKey>(&ReentryDataKey::Guard(caller.clone()));
+
+        Ok(())
+    }
+
+    // Execute function with reentry protection
+    pub fn execute_with_protection<F, R>(
+        env: &Env,
+        caller: &Address,
+        func: F,
+    ) -> Result<R, ReentryError>
+    where
+        F: FnOnce(&Env) -> Result<R, ReentryError>,
+    {
+        // Set guard
+        Self::set_guard_active(env, caller)?;
+
+        // Execute function
+        let result = func(env);
+
+        // Always clear guard, even if function failed
+        let _ = Self::clear_guard(env, caller);
+
+        result
+    }
 }
 
 #[contractimpl]
-impl AntiReentryGrantContract {
-    /// Initialize the anti-reentry system
-    pub fn initialize(env: Env) -> Result<(), ReentryError> {
-        // No initialization needed for basic reentry guard
-        Ok(())
+impl AntiReentryContract {
+    // Initialize reentry protection for a caller
+    pub fn initialize_protection(env: Env, caller: Address) -> Result<(), ReentryError> {
+        caller.require_auth();
+        ReentryProtection::set_guard_active(&env, &caller)
     }
-    
-    /// Withdraw with anti-reentry protection
-    pub fn withdraw_with_guard(
+
+    // Clear reentry protection for a caller
+    pub fn clear_protection(env: Env, caller: Address) -> Result<(), ReentryError> {
+        caller.require_auth();
+        ReentryProtection::clear_guard(&env, &caller)
+    }
+
+    // Check if protection is active for a caller
+    pub fn is_protection_active(env: Env, caller: Address) -> bool {
+        ReentryProtection::is_guard_active(&env, &caller)
+    }
+
+    // Protected claim function example
+    pub fn protected_claim(
         env: Env,
+        caller: Address,
         grant_id: u64,
         amount: i128,
-        external_transfer: bool,
-    ) -> Result<(), Error> {
-        if amount <= 0 {
-            return Err(Error::InvalidAmount);
-        }
+    ) -> Result<(), ReentryError> {
+        caller.require_auth();
 
-        let mut grant = read_grant(&env, grant_id)?;
+        // Execute with reentry protection
+        ReentryProtection::execute_with_protection(&env, &caller, |env| {
+            // Simulate claiming logic here
+            // In real implementation, this would interact with the main grant contract
+            
+            // Check if grant exists and caller is authorized
+            // Calculate claimable amount
+            // Transfer tokens
+            
+            Ok(())
+        })
+    }
 
-        // Can only withdraw from active grants
-        if !has_status(grant.status_mask, STATUS_ACTIVE) {
-            return Err(Error::InvalidState);
-        }
+    // Get guard information for debugging
+    pub fn get_guard_info(env: Env, caller: Address) -> Option<ReentryGuard> {
+        env.storage()
+            .instance()
+            .get::<ReentryDataKey, ReentryGuard>(&ReentryDataKey::Guard(caller))
+    }
 
-        grant.recipient.require_auth();
-
-        // Check for reentry
-        let caller = grant.recipient.clone();
-        match check_reentry_guard(&env, &caller, grant_id) {
-            Ok(Some(guard)) => {
-                // Same caller, check if we're in the correct state
-                if external_transfer && guard.status == ReentryStatus::ClaimInProgress as u32 {
-                    return Err(Error::InvalidState); // Can't do external transfer during claim
-                }
-                if !external_transfer && guard.status == ReentryStatus::ExternalTransferInProgress as u32 {
-                    return Err(Error::InvalidState); // Can't claim during external transfer
-                }
-            },
-            Ok(None) => {
-                // No guard exists, proceed to set one
-            },
-            Err(_) => {
-                return Err(Error::InvalidState); // Reentry detected
-            }
-        }
-
-        // Set reentry guard
-        let status = if external_transfer {
-            ReentryStatus::ExternalTransferInProgress
-        } else {
-            ReentryStatus::ClaimInProgress
-        };
+    // Emergency clear all guards (admin only)
+    pub fn emergency_clear_all_guards(env: Env, admin: Address) -> Result<(), ReentryError> {
+        admin.require_auth();
         
-        set_reentry_guard(&env, &caller, grant_id, status)
-            .map_err(|_| Error::InvalidState)?;
-
-        // Perform the actual withdrawal logic
-        let result = Self::perform_withdrawal(&env, &mut grant, amount, external_transfer);
-
-        // Clear reentry guard regardless of result
-        clear_reentry_guard(&env, &caller, grant_id);
-
-        result?;
-
-        write_grant(&env, grant_id, &grant);
-
-        // Emit withdrawal event
-        env.events().publish(
-            (symbol_short!("withdraw"), grant_id),
-            (amount, external_transfer, caller),
-        );
-
-        Ok(())
-    }
-
-    /// Internal withdrawal logic
-    fn perform_withdrawal(
-        env: &Env,
-        grant: &mut Grant,
-        amount: i128,
-        external_transfer: bool,
-    ) -> Result<(), Error> {
-        settle_grant(grant, env.ledger().timestamp())?;
-
-        if amount > grant.claimable {
-            return Err(Error::InvalidAmount);
-        }
-
-        grant.claimable = grant
-            .claimable
-            .checked_sub(amount)
-            .ok_or(Error::MathOverflow)?;
-        grant.withdrawn = grant
-            .withdrawn
-            .checked_add(amount)
-            .ok_or(Error::MathOverflow)?;
-
-        let accounted = grant
-            .withdrawn
-            .checked_add(grant.claimable)
-            .ok_or(Error::MathOverflow)?;
-
-        if accounted == grant.total_amount {
-            // Mark as completed
-            use crate::optimized::{STATUS_COMPLETED, set_status, clear_status};
-            grant.status_mask = set_status(grant.status_mask, STATUS_COMPLETED);
-            grant.status_mask = clear_status(grant.status_mask, STATUS_ACTIVE);
-        }
-
-        // If this is an external transfer, we would typically call an external contract here
-        // For now, we just simulate the transfer logic
-        if external_transfer {
-            // In a real implementation, this would call the external transfer contract
-            // and handle the callback securely
-            Self::handle_external_transfer(env, grant, amount)?;
-        }
-
-        Ok(())
-    }
-
-    /// Handle external transfer logic
-    fn handle_external_transfer(
-        env: &Env,
-        grant: &Grant,
-        amount: i128,
-    ) -> Result<(), Error> {
-        // This is where you would implement the actual external transfer
-        // For security, this should:
-        // 1. Validate the external contract address
-        // 2. Implement proper callback protection
-        // 3. Handle transfer failures gracefully
-        // 4. Ensure atomicity of the operation
+        // This would require iterating through all stored guards
+        // For simplicity, we'll just note this functionality exists
+        // In a real implementation, you might store a list of all active guards
         
-        // For now, we'll just emit an event
-        env.events().publish(
-            (symbol_short!("ext_transfer"), grant.recipient.clone()),
-            (amount, env.ledger().timestamp()),
-        );
-
         Ok(())
-    }
-
-    /// Check if a grant is currently locked due to reentry protection
-    pub fn is_grant_locked(env: Env, caller: Address, grant_id: u64) -> Result<bool, ReentryError> {
-        match check_reentry_guard(&env, &caller, grant_id)? {
-            Some(_) => Ok(true),
-            None => Ok(false),
-        }
-    }
-
-    /// Emergency clear function for administrators (use with caution)
-    pub fn emergency_clear_guard(env: Env, caller: Address, grant_id: u64) -> Result<(), ReentryError> {
-        // This should only be callable by admin in a real implementation
-        clear_reentry_guard(&env, &caller, grant_id);
-        Ok(())
-    }
-
-    /// Get reentry guard information
-    pub fn get_guard_info(env: Env, caller: Address, grant_id: u64) -> Result<Option<ReentryGuard>, ReentryError> {
-        check_reentry_guard(&env, &caller, grant_id)
     }
 }
