@@ -279,7 +279,7 @@ impl GrantContract {
             return Err(Error::InvalidState);
         }
 
-        let new_mask = set_status(current_mask, STATUS_PAUSED);
+        let mut new_mask = set_status(current_mask, STATUS_PAUSED);
         new_mask = clear_status(new_mask, STATUS_ACTIVE);
 
         settle_grant(&mut grant, env.ledger().timestamp())?;
@@ -300,7 +300,7 @@ impl GrantContract {
             return Err(Error::InvalidState);
         }
 
-        let new_mask = set_status(current_mask, STATUS_ACTIVE);
+        let mut new_mask = set_status(current_mask, STATUS_ACTIVE);
         new_mask = clear_status(new_mask, STATUS_PAUSED);
 
         settle_grant(&mut grant, env.ledger().timestamp())?;
@@ -373,48 +373,47 @@ impl GrantContract {
     }
 
     pub fn withdraw(env: Env, grant_id: u64, amount: i128) -> Result<(), Error> {
-        if amount <= 0 {
-            return Err(Error::InvalidAmount);
-        }
-
-        let mut grant = read_grant(&env, grant_id)?;
-
-        // Can only withdraw from active grants
-        if !has_status(grant.status_mask, STATUS_ACTIVE) {
-            return Err(Error::InvalidState);
-        }
-
-        grant.recipient.require_auth();
-
-        settle_grant(&mut grant, env.ledger().timestamp())?;
-
-        if amount > grant.claimable {
-            return Err(Error::InvalidAmount);
-        }
-
-        grant.claimable = grant
-            .claimable
-            .checked_sub(amount)
-            .ok_or(Error::MathOverflow)?;
-        grant.withdrawn = grant
-            .withdrawn
-            .checked_add(amount)
-            .ok_or(Error::MathOverflow)?;
-
-        let accounted = grant
-            .withdrawn
-            .checked_add(grant.claimable)
-            .ok_or(Error::MathOverflow)?;
-
-        if accounted == grant.total_amount {
-            grant.status_mask = set_status(grant.status_mask, STATUS_COMPLETED);
-            grant.status_mask = clear_status(grant.status_mask, STATUS_ACTIVE);
-        }
-
-        write_grant(&env, grant_id, &grant);
+    if amount <= 0 {
+        return Err(Error::InvalidAmount);
     }
 
-    pub fn update_rate(env: Env, grant_id: u64, new_rate: i128) -> Result<(), Error> {
+    let mut grant = read_grant(&env, grant_id)?;
+
+    // Can only withdraw from active grants
+    if !has_status(grant.status_mask, STATUS_ACTIVE) {
+        return Err(Error::InvalidState);
+    }
+
+    // Settle the grant to calculate current vested amount
+    settle_grant(&mut grant, env.ledger().timestamp())?;
+
+    // Check if enough claimable amount
+    if grant.claimable < amount {
+        return Err(Error::InvalidAmount);
+    }
+
+    // Update grant
+    grant.claimable -= amount;
+    grant.withdrawn += amount;
+
+    // Check if grant is completed
+    if grant.withdrawn >= grant.total_amount {
+        grant.status_mask = set_status(grant.status_mask, STATUS_COMPLETED);
+        grant.status_mask = clear_status(grant.status_mask, STATUS_ACTIVE);
+    }
+
+    write_grant(&env, grant_id, &grant);
+
+    // Emit withdrawal event
+    env.events().publish(
+        (symbol_short!("withdraw"), grant_id),
+        (amount, grant.withdrawn),
+    );
+
+    Ok(())
+}
+
+pub fn update_rate(env: Env, grant_id: u64, new_rate: i128) -> Result<(), Error> {
         require_admin_auth(&env)?;
 
         if new_rate < 0 {
