@@ -780,4 +780,336 @@ fn test_transfer_beneficiary_lazy_behaviour() {
     assert_eq!(final_list.get(0), vault_id);
 }
 
+// =========================================================================
+// Sudo Timelock Integration Tests
+// =========================================================================
 
+#[test]
+fn test_timelock_propose_and_execute_pause() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let council = Address::generate(&env);
+    let breaker = Address::generate(&env);
+
+    client.initialize(&admin, &1_000_000i128);
+
+    // Bootstrap roles (these use require_admin via current_contract_address)
+    env.as_contract(&contract_id, || {
+        env.current_contract_address().set(&admin);
+    });
+    client.set_security_council(&council);
+    client.set_circuit_breaker(&breaker);
+
+    // Contract should not be paused initially
+    assert_eq!(client.is_paused(), false);
+
+    // Propose a Pause action at timestamp 1000
+    env.ledger().set_timestamp(1000);
+    let action_id = client.propose_admin_action(&admin, &AdminActionType::Pause);
+    assert_eq!(action_id, 1);
+
+    // Verify staged action
+    let staged = client.get_staged_action(&action_id);
+    assert_eq!(staged.proposed_at, 1000);
+    assert_eq!(staged.execute_after, 1000 + 172_800); // 48h later
+    assert_eq!(staged.status, ActionStatus::Pending);
+
+    // Advance past the 48-hour window
+    env.ledger().set_timestamp(1000 + 172_800);
+    client.execute_staged_action(&admin, &action_id);
+
+    // Contract should now be paused
+    assert_eq!(client.is_paused(), true);
+
+    // Verify action is marked Executed
+    let executed = client.get_staged_action(&action_id);
+    assert_eq!(executed.status, ActionStatus::Executed);
+}
+
+#[test]
+#[should_panic(expected = "TimelockActive")]
+fn test_timelock_premature_execution_reverts() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    client.initialize(&admin, &1_000_000i128);
+
+    // Propose at t=1000
+    env.ledger().set_timestamp(1000);
+    let action_id = client.propose_admin_action(&admin, &AdminActionType::Pause);
+
+    // Try to execute 1 second before the window — must revert
+    env.ledger().set_timestamp(1000 + 172_800 - 1);
+    client.execute_staged_action(&admin, &action_id);
+}
+
+#[test]
+fn test_timelock_security_council_veto() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let council = Address::generate(&env);
+
+    client.initialize(&admin, &1_000_000i128);
+
+    env.as_contract(&contract_id, || {
+        env.current_contract_address().set(&admin);
+    });
+    client.set_security_council(&council);
+
+    // Propose action
+    env.ledger().set_timestamp(1000);
+    let action_id = client.propose_admin_action(&admin, &AdminActionType::Pause);
+
+    // Council vetoes the action mid-timelock
+    env.ledger().set_timestamp(1000 + 86_400); // 24h in
+    client.veto_staged_action(&council, &action_id);
+
+    // Verify it's vetoed
+    let vetoed = client.get_staged_action(&action_id);
+    assert_eq!(vetoed.status, ActionStatus::Vetoed);
+
+    // Contract should still NOT be paused
+    assert_eq!(client.is_paused(), false);
+}
+
+#[test]
+#[should_panic(expected = "Action is not pending")]
+fn test_timelock_cannot_execute_vetoed_action() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let council = Address::generate(&env);
+
+    client.initialize(&admin, &1_000_000i128);
+
+    env.as_contract(&contract_id, || {
+        env.current_contract_address().set(&admin);
+    });
+    client.set_security_council(&council);
+
+    env.ledger().set_timestamp(1000);
+    let action_id = client.propose_admin_action(&admin, &AdminActionType::Pause);
+
+    // Veto
+    client.veto_staged_action(&council, &action_id);
+
+    // Attempt execution after timelock — must fail because vetoed
+    env.ledger().set_timestamp(1000 + 172_800);
+    client.execute_staged_action(&admin, &action_id);
+}
+
+#[test]
+fn test_circuit_breaker_emergency_pause() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let breaker = Address::generate(&env);
+
+    client.initialize(&admin, &1_000_000i128);
+
+    env.as_contract(&contract_id, || {
+        env.current_contract_address().set(&admin);
+    });
+    client.set_circuit_breaker(&breaker);
+
+    assert_eq!(client.is_paused(), false);
+
+    // Emergency pause — no timelock required
+    client.emergency_pause(&breaker);
+    assert_eq!(client.is_paused(), true);
+}
+
+#[test]
+#[should_panic(expected = "Caller is not the Circuit Breaker")]
+fn test_emergency_pause_unauthorized() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let breaker = Address::generate(&env);
+    let attacker = Address::generate(&env);
+
+    client.initialize(&admin, &1_000_000i128);
+
+    env.as_contract(&contract_id, || {
+        env.current_contract_address().set(&admin);
+    });
+    client.set_circuit_breaker(&breaker);
+
+    // Attacker tries to emergency pause — must fail
+    client.emergency_pause(&attacker);
+}
+
+#[test]
+#[should_panic(expected = "Caller is not the Security Council")]
+fn test_veto_unauthorized() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let council = Address::generate(&env);
+    let attacker = Address::generate(&env);
+
+    client.initialize(&admin, &1_000_000i128);
+
+    env.as_contract(&contract_id, || {
+        env.current_contract_address().set(&admin);
+    });
+    client.set_security_council(&council);
+
+    env.ledger().set_timestamp(1000);
+    let action_id = client.propose_admin_action(&admin, &AdminActionType::Pause);
+
+    // Attacker tries to veto — must fail
+    client.veto_staged_action(&attacker, &action_id);
+}
+
+#[test]
+fn test_timelock_create_vault_full_e2e() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let beneficiary = Address::generate(&env);
+
+    client.initialize(&admin, &1_000_000i128);
+
+    // Propose a CreateVaultFull action
+    env.ledger().set_timestamp(5000);
+    let action_id = client.propose_admin_action(
+        &admin,
+        &AdminActionType::CreateVaultFull(beneficiary.clone(), 5000, 10000, 20000),
+    );
+
+    // Execute after timelock
+    env.ledger().set_timestamp(5000 + 172_800);
+    client.execute_staged_action(&admin, &action_id);
+
+    // Verify the vault was actually created
+    let vault = client.get_vault(&1);
+    assert_eq!(vault.owner, beneficiary);
+    assert_eq!(vault.total_amount, 5000);
+    assert_eq!(vault.start_time, 10000);
+    assert_eq!(vault.end_time, 20000);
+    assert_eq!(vault.is_initialized, true);
+}
+
+#[test]
+fn test_timelock_unpause_requires_delay() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let breaker = Address::generate(&env);
+
+    client.initialize(&admin, &1_000_000i128);
+
+    env.as_contract(&contract_id, || {
+        env.current_contract_address().set(&admin);
+    });
+    client.set_circuit_breaker(&breaker);
+
+    // Emergency pause
+    client.emergency_pause(&breaker);
+    assert_eq!(client.is_paused(), true);
+
+    // Propose unpause — must still go through 48h timelock
+    env.ledger().set_timestamp(2000);
+    let action_id = client.propose_admin_action(&admin, &AdminActionType::Unpause);
+
+    // Execute after delay
+    env.ledger().set_timestamp(2000 + 172_800);
+    client.execute_staged_action(&admin, &action_id);
+    assert_eq!(client.is_paused(), false);
+}
+
+#[test]
+#[should_panic(expected = "Action is not pending")]
+fn test_timelock_cannot_execute_twice() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    client.initialize(&admin, &1_000_000i128);
+
+    env.ledger().set_timestamp(1000);
+    let action_id = client.propose_admin_action(&admin, &AdminActionType::Pause);
+
+    env.ledger().set_timestamp(1000 + 172_800);
+    client.execute_staged_action(&admin, &action_id);
+
+    // Second execution must fail
+    client.execute_staged_action(&admin, &action_id);
+}
+
+#[test]
+fn test_timelock_revoke_tokens_e2e() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(VestingContract, ());
+    let client = VestingContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let owner = Address::generate(&env);
+
+    client.initialize(&admin, &1_000_000i128);
+
+    // Create vault directly (old path, for setup)
+    env.as_contract(&contract_id, || {
+        env.current_contract_address().set(&admin);
+    });
+    let vault_id = client.create_vault_full(&owner, &5000i128, &100u64, &200u64);
+
+    // Propose revoke through timelock
+    env.ledger().set_timestamp(1000);
+    let action_id = client.propose_admin_action(
+        &admin,
+        &AdminActionType::RevokeTokens(vault_id),
+    );
+
+    // Execute after 48h
+    env.ledger().set_timestamp(1000 + 172_800);
+    client.execute_staged_action(&admin, &action_id);
+
+    // Verify vault is fully revoked
+    let vault = client.get_vault(&vault_id);
+    assert_eq!(vault.released_amount, vault.total_amount);
+}

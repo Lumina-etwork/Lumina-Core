@@ -7,6 +7,13 @@ use soroban_sdk::{
 mod factory;
 pub use factory::{VestingFactory, VestingFactoryClient};
 
+mod timelock;
+pub use timelock::{
+    AdminActionType, ActionStatus, StagedAction,
+    AdminActionProposed, AdminActionExecuted, AdminActionVetoed,
+    EmergencyPauseActivated, TIMELOCK_DELAY_SECONDS,
+};
+
 #[contract]
 pub struct VestingContract;
 
@@ -628,5 +635,303 @@ impl VestingContract {
         
         let sum = total_locked + total_claimed + admin_balance;
         sum == initial_supply
+    }
+
+    // =====================================================================
+    // Sudo Timelock Endpoints
+    // =====================================================================
+
+    /// Set the Security Council address (admin-only, one-time bootstrap).
+    pub fn set_security_council(env: Env, council: Address) {
+        Self::require_admin(&env);
+        timelock::set_security_council_addr(&env, &council);
+    }
+
+    /// Set the Circuit Breaker address (admin-only, one-time bootstrap).
+    pub fn set_circuit_breaker(env: Env, breaker: Address) {
+        Self::require_admin(&env);
+        timelock::set_circuit_breaker_addr(&env, &breaker);
+    }
+
+    /// Propose an administrative action. Stages it in persistent storage
+    /// with a mandatory 48-hour execution delay.
+    /// Returns the unique `action_id`.
+    pub fn propose_admin_action(env: Env, caller: Address, action: AdminActionType) -> u64 {
+        // Verify caller is admin
+        let admin: Address = env.storage().instance().get(&ADMIN_ADDRESS)
+            .unwrap_or_else(|| panic!("Admin not set"));
+        caller.require_auth();
+        if caller != admin {
+            panic!("Caller is not admin");
+        }
+
+        let now = env.ledger().timestamp();
+        let action_id = timelock::next_action_id(&env);
+        let execute_after = now + TIMELOCK_DELAY_SECONDS;
+
+        let staged = StagedAction {
+            action_id,
+            action,
+            proposer: caller.clone(),
+            proposed_at: now,
+            execute_after,
+            status: ActionStatus::Pending,
+        };
+
+        timelock::store_staged_action(&env, &staged);
+
+        // Emit AdminActionProposed event
+        let event = AdminActionProposed {
+            action_id,
+            proposer: caller,
+            execute_after,
+            proposed_at: now,
+        };
+        env.events().publish(
+            (Symbol::new(&env, "AdminActionProposed"), action_id),
+            event,
+        );
+
+        action_id
+    }
+
+    /// Execute a previously staged action. Reverts with TimelockActive
+    /// if the 48-hour window has not elapsed.
+    pub fn execute_staged_action(env: Env, caller: Address, action_id: u64) {
+        // Verify caller is admin
+        let admin: Address = env.storage().instance().get(&ADMIN_ADDRESS)
+            .unwrap_or_else(|| panic!("Admin not set"));
+        caller.require_auth();
+        if caller != admin {
+            panic!("Caller is not admin");
+        }
+
+        let mut staged = timelock::load_staged_action(&env, action_id);
+
+        // Must still be Pending
+        if staged.status != ActionStatus::Pending {
+            panic!("Action is not pending");
+        }
+
+        // Enforce timelock — even 1 second early must revert
+        let now = env.ledger().timestamp();
+        if now < staged.execute_after {
+            panic!("TimelockActive");
+        }
+
+        // Mark executed BEFORE dispatching to prevent re-entrancy
+        staged.status = ActionStatus::Executed;
+        timelock::store_staged_action(&env, &staged);
+
+        // Dispatch the action payload
+        match staged.action {
+            AdminActionType::Pause => {
+                timelock::set_paused(&env, true);
+            }
+            AdminActionType::Unpause => {
+                timelock::set_paused(&env, false);
+            }
+            AdminActionType::CreateVaultFull(owner, amount, start, end) => {
+                Self::create_vault_full_internal(&env, owner, amount, start, end);
+            }
+            AdminActionType::CreateVaultLazy(owner, amount, start, end) => {
+                Self::create_vault_lazy_internal(&env, owner, amount, start, end);
+            }
+            AdminActionType::RevokeTokens(vault_id) => {
+                Self::revoke_tokens_internal(&env, vault_id);
+            }
+            AdminActionType::RevokePartial(vault_id, amount) => {
+                Self::revoke_partial_internal(&env, vault_id, amount);
+            }
+            AdminActionType::TransferBeneficiary(vault_id, new_addr) => {
+                Self::transfer_beneficiary_internal(&env, vault_id, new_addr);
+            }
+            AdminActionType::MarkIrrevocable(vault_id) => {
+                Self::mark_irrevocable_internal(&env, vault_id);
+            }
+            AdminActionType::ProposeNewAdmin(new_admin) => {
+                env.storage().instance().set(&PROPOSED_ADMIN, &new_admin);
+            }
+        }
+
+        // Emit AdminActionExecuted event
+        let event = AdminActionExecuted {
+            action_id,
+            executor: caller,
+            executed_at: now,
+        };
+        env.events().publish(
+            (Symbol::new(&env, "AdminActionExecuted"), action_id),
+            event,
+        );
+    }
+
+    /// Security Council can veto a pending staged action.
+    pub fn veto_staged_action(env: Env, caller: Address, action_id: u64) {
+        timelock::require_security_council(&env, &caller);
+
+        let mut staged = timelock::load_staged_action(&env, action_id);
+
+        if staged.status != ActionStatus::Pending {
+            panic!("Action is not pending");
+        }
+
+        staged.status = ActionStatus::Vetoed;
+        timelock::store_staged_action(&env, &staged);
+
+        let now = env.ledger().timestamp();
+        let event = AdminActionVetoed {
+            action_id,
+            vetoed_by: caller,
+            vetoed_at: now,
+        };
+        env.events().publish(
+            (Symbol::new(&env, "AdminActionVetoed"), action_id),
+            event,
+        );
+    }
+
+    /// Circuit Breaker can immediately pause the contract (bypasses timelock).
+    pub fn emergency_pause(env: Env, caller: Address) {
+        timelock::require_circuit_breaker(&env, &caller);
+        timelock::set_paused(&env, true);
+
+        let now = env.ledger().timestamp();
+        let event = EmergencyPauseActivated {
+            activated_by: caller,
+            activated_at: now,
+        };
+        env.events().publish(
+            (Symbol::new(&env, "EmergencyPause"),),
+            event,
+        );
+    }
+
+    /// Query a staged action by ID.
+    pub fn get_staged_action(env: Env, action_id: u64) -> StagedAction {
+        timelock::load_staged_action(&env, action_id)
+    }
+
+    /// Check whether the contract is paused.
+    pub fn is_paused(env: Env) -> bool {
+        timelock::is_paused(&env)
+    }
+
+    // =====================================================================
+    // Internal helpers (no auth — called from execute_staged_action)
+    // =====================================================================
+
+    fn create_vault_full_internal(env: &Env, owner: Address, amount: i128, start_time: u64, end_time: u64) -> u64 {
+        let mut vault_count: u64 = env.storage().instance().get(&VAULT_COUNT).unwrap_or(0);
+        vault_count += 1;
+        let mut admin_balance: i128 = env.storage().instance().get(&ADMIN_BALANCE).unwrap_or(0);
+        if admin_balance < amount { panic!("Insufficient admin balance"); }
+        admin_balance -= amount;
+        env.storage().instance().set(&ADMIN_BALANCE, &admin_balance);
+
+        let vault = Vault {
+            owner: owner.clone(),
+            total_amount: amount,
+            released_amount: 0,
+            start_time,
+            end_time,
+            is_initialized: true,
+            is_irrevocable: false,
+        };
+        env.storage().instance().set(&VAULT_DATA, &vault_count, &vault);
+
+        let mut user_vaults: Vec<u64> = env.storage().instance()
+            .get(&USER_VAULTS, &owner)
+            .unwrap_or(Vec::new(env));
+        user_vaults.push_back(vault_count);
+        env.storage().instance().set(&USER_VAULTS, &owner, &user_vaults);
+        env.storage().instance().set(&VAULT_COUNT, &vault_count);
+        vault_count
+    }
+
+    fn create_vault_lazy_internal(env: &Env, owner: Address, amount: i128, start_time: u64, end_time: u64) -> u64 {
+        let mut vault_count: u64 = env.storage().instance().get(&VAULT_COUNT).unwrap_or(0);
+        vault_count += 1;
+        let mut admin_balance: i128 = env.storage().instance().get(&ADMIN_BALANCE).unwrap_or(0);
+        if admin_balance < amount { panic!("Insufficient admin balance"); }
+        admin_balance -= amount;
+        env.storage().instance().set(&ADMIN_BALANCE, &admin_balance);
+
+        let vault = Vault {
+            owner: owner.clone(),
+            total_amount: amount,
+            released_amount: 0,
+            start_time,
+            end_time,
+            is_initialized: false,
+            is_irrevocable: false,
+        };
+        env.storage().instance().set(&VAULT_DATA, &vault_count, &vault);
+        env.storage().instance().set(&VAULT_COUNT, &vault_count);
+        vault_count
+    }
+
+    fn revoke_tokens_internal(env: &Env, vault_id: u64) -> i128 {
+        let mut vault: Vault = env.storage().instance()
+            .get(&VAULT_DATA, &vault_id)
+            .unwrap_or_else(|| panic!("Vault not found"));
+        if vault.is_irrevocable { panic!("Vault is irrevocable"); }
+        let unreleased = vault.total_amount - vault.released_amount;
+        if unreleased == 0 { panic!("No tokens available to revoke"); }
+        vault.released_amount = vault.total_amount;
+        env.storage().instance().set(&VAULT_DATA, &vault_id, &vault);
+        let mut admin_balance: i128 = env.storage().instance().get(&ADMIN_BALANCE).unwrap_or(0);
+        admin_balance += unreleased;
+        env.storage().instance().set(&ADMIN_BALANCE, &admin_balance);
+        unreleased
+    }
+
+    fn revoke_partial_internal(env: &Env, vault_id: u64, amount: i128) -> i128 {
+        let mut vault: Vault = env.storage().instance()
+            .get(&VAULT_DATA, &vault_id)
+            .unwrap_or_else(|| panic!("Vault not found"));
+        if vault.is_irrevocable { panic!("Vault is irrevocable"); }
+        let unvested = vault.total_amount - vault.released_amount;
+        if amount <= 0 { panic!("Amount to revoke must be positive"); }
+        if amount > unvested { panic!("Amount exceeds unvested balance"); }
+        vault.released_amount += amount;
+        env.storage().instance().set(&VAULT_DATA, &vault_id, &vault);
+        let mut admin_balance: i128 = env.storage().instance().get(&ADMIN_BALANCE).unwrap_or(0);
+        admin_balance += amount;
+        env.storage().instance().set(&ADMIN_BALANCE, &admin_balance);
+        amount
+    }
+
+    fn transfer_beneficiary_internal(env: &Env, vault_id: u64, new_address: Address) {
+        let mut vault: Vault = env.storage().instance()
+            .get(&VAULT_DATA, &vault_id)
+            .unwrap_or_else(|| panic!("Vault not found"));
+        let old_owner = vault.owner.clone();
+        if vault.is_initialized {
+            let old_vaults: Vec<u64> = env.storage().instance()
+                .get(&USER_VAULTS, &old_owner)
+                .unwrap_or(Vec::new(env));
+            let mut updated = Vec::new(env);
+            for id in old_vaults.iter() {
+                if id != vault_id { updated.push_back(id); }
+            }
+            env.storage().instance().set(&USER_VAULTS, &old_owner, &updated);
+            let mut new_vaults: Vec<u64> = env.storage().instance()
+                .get(&USER_VAULTS, &new_address)
+                .unwrap_or(Vec::new(env));
+            new_vaults.push_back(vault_id);
+            env.storage().instance().set(&USER_VAULTS, &new_address, &new_vaults);
+        }
+        vault.owner = new_address;
+        env.storage().instance().set(&VAULT_DATA, &vault_id, &vault);
+    }
+
+    fn mark_irrevocable_internal(env: &Env, vault_id: u64) {
+        let mut vault: Vault = env.storage().instance()
+            .get(&VAULT_DATA, &vault_id)
+            .unwrap_or_else(|| panic!("Vault not found"));
+        if vault.is_irrevocable { panic!("Vault is already irrevocable"); }
+        vault.is_irrevocable = true;
+        env.storage().instance().set(&VAULT_DATA, &vault_id, &vault);
     }
 }
