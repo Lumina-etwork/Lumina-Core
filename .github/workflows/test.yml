@@ -55,6 +55,10 @@ jobs:
           cargo clean
           cargo build --target wasm32v1-none --release
 
+      - name: Run Formal Reentrancy Verification
+        run: |
+          cargo test -p vesting_contracts formal_reentrancy -- --nocapture
+
       - name: Run Unit Tests
         run: |
           cargo test --workspace

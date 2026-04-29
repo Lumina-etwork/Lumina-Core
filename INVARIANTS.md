@@ -506,6 +506,79 @@ create_vault(start, end) requires
 
 ---
 
+## 29. Cross-Contract Reentrancy Lock
+
+**Plain English:** Every state-mutating flow that can synchronously call an
+external contract must acquire the global reentrancy lock first. Any callback
+that tries to enter a protected flow while that lock is held is rejected.
+
+**Formal:**
+
+```
+Locked = storage[DataKey::ReentrancyLock]
+
+ProtectedEntryPoint() requires Locked = false
+ProtectedEntryPoint():
+  Locked := true
+  ...
+  ExternalCall()
+  ...
+  Locked := false
+
+forall callback c during ExternalCall():
+  c in ProtectedEntryPoints -> Err(ReentrancyDetected)
+```
+
+**Protected entry points:**
+
+- `claim_tokens`
+- `claim_tokens_diversified`
+- `batch_claim`
+- `claim_tokens_regulated`
+- `claim_yield`
+- `claim_and_swap`
+- `auto_stake`
+- `manual_unstake` / internal `do_unstake`
+
+**CI witness:** `contracts/vesting_contracts/tests/formal_reentrancy_verification.rs`
+
+---
+
+## 30. Claim CEI Ordering Across Tokens, Staking, and Path Payments
+
+**Plain English:** The vault must persist every claim-side effect that changes
+`released_amount` before any untrusted token, staking, or path-payment callback
+is given control. A recursive caller must therefore only ever observe the
+post-claim state.
+
+**Formal:**
+
+```
+forall vault v, claim amount a:
+  let Released_before = released_amount(v)
+
+  claim(v, a):
+    require a <= claimable(v)
+    released_amount(v) := Released_before + a
+    persist(v)
+    external token / staking / path-payment calls...
+
+  During every callback frame:
+    released_amount(v) = Released_before + a
+```
+
+**Bounded scenarios enforced in CI:**
+
+- malicious payout token reentering `claim_tokens`
+- malicious staking contract reentering from `claim_yield_for`
+- multi-hop path payment route where each DEX hop and the destination token
+  attempt recursive entry during `claim_and_swap`
+
+**Failure condition:** If any callback can increase `released_amount` twice or
+observe the pre-claim value, the formal reentrancy harness must fail.
+
+---
+
 ## Halmos / Certora Skeleton
 
 ```solidity

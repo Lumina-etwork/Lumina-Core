@@ -98,4 +98,5 @@ pub enum Error {
     Underflow = 901,
     DivisionByZero = 902,
     InternalError = 903,
+    ReentrancyDetected = 904,
 }
