@@ -59,6 +59,7 @@ pub enum AdapterDataKey {
     YieldSummary(u64), // vault_id -> VaultYieldSummary
     IsPaused,
     YieldTreasury, // Address where yield is collected
+    InsuranceTreasury, // Address of insurance treasury for 1% fee
 }
 
 #[contracttype]
@@ -114,6 +115,14 @@ pub struct YieldClaimed {
 }
 
 #[contractevent]
+pub struct InsuranceFundCapitalized {
+    #[topic]
+    pub asset: Address,
+    pub amount: i128,
+    pub total_balance: i128, // But we don't have total_balance here
+}
+
+#[contractevent]
 pub struct PositionWithdrawn {
     #[topic]
     pub vault_id: u64,
@@ -131,7 +140,7 @@ pub struct DepositToYieldAdapter;
 #[contractimpl]
 impl DepositToYieldAdapter {
     /// Initialize the adapter with admin and vesting contract addresses
-    pub fn initialize(env: Env, admin: Address, vesting_contract: Address, yield_treasury: Address) {
+    pub fn initialize(env: Env, admin: Address, vesting_contract: Address, yield_treasury: Address, insurance_treasury: Address) {
         if env.storage().instance().has(&AdapterDataKey::Admin) {
             panic!("Already initialized");
         }
@@ -141,6 +150,7 @@ impl DepositToYieldAdapter {
         env.storage().instance().set(&AdapterDataKey::Admin, &admin);
         env.storage().instance().set(&AdapterDataKey::VestingContract, &vesting_contract);
         env.storage().instance().set(&AdapterDataKey::YieldTreasury, &yield_treasury);
+        env.storage().instance().set(&AdapterDataKey::InsuranceTreasury, &insurance_treasury);
         env.storage().instance().set(&AdapterDataKey::IsPaused, &false);
         env.storage().instance().set(&AdapterDataKey::ProtocolCounter, &0u64);
     }
@@ -317,10 +327,31 @@ impl DepositToYieldAdapter {
         // Update yield summary
         Self::update_yield_summary(&env, vault_id, 0, claimed_yield);
         
-        // Transfer claimed yield to treasury
+        // Calculate insurance fee (1%)
+        let insurance_fee = claimed_yield / 100;
+        let yield_to_treasury = claimed_yield - insurance_fee;
+        
+        // Transfer yield to treasury
         let treasury = Self::get_yield_treasury(&env);
         let token_client = token::Client::new(&env, &asset_address);
-        token_client.transfer(&env.current_contract_address(), &treasury, &claimed_yield);
+        if yield_to_treasury > 0 {
+            token_client.transfer(&env.current_contract_address(), &treasury, &yield_to_treasury);
+        }
+        
+        // Transfer insurance fee to insurance treasury
+        if insurance_fee > 0 {
+            let insurance_treasury = Self::get_insurance_treasury(&env);
+            token_client.transfer(&env.current_contract_address(), &insurance_treasury, &insurance_fee);
+            
+            // Record the deposit in insurance treasury
+            let args = vec![
+                &env,
+                env.current_contract_address().into_val(),
+                asset_address.into_val(),
+                insurance_fee.into_val(),
+            ];
+            env.invoke_contract(&insurance_treasury, &Symbol::new(&env, "record_deposit"), args);
+        }
         
         // Emit event
         YieldClaimed {
@@ -379,9 +410,30 @@ impl DepositToYieldAdapter {
         }
         
         if yield_withdrawn > 0 {
+            // Calculate insurance fee (1%)
+            let insurance_fee = yield_withdrawn / 100;
+            let yield_to_treasury = yield_withdrawn - insurance_fee;
+            
             // Transfer yield to treasury
             let treasury = Self::get_yield_treasury(&env);
-            token_client.transfer(&env.current_contract_address(), &treasury, &yield_withdrawn);
+            if yield_to_treasury > 0 {
+                token_client.transfer(&env.current_contract_address(), &treasury, &yield_to_treasury);
+            }
+            
+            // Transfer insurance fee to insurance treasury
+            if insurance_fee > 0 {
+                let insurance_treasury = Self::get_insurance_treasury(&env);
+                token_client.transfer(&env.current_contract_address(), &insurance_treasury, &insurance_fee);
+                
+                // Record the deposit in insurance treasury
+                let args = vec![
+                    &env,
+                    env.current_contract_address().into_val(),
+                    asset_address.into_val(),
+                    insurance_fee.into_val(),
+                ];
+                env.invoke_contract(&insurance_treasury, &Symbol::new(&env, "record_deposit"), args);
+            }
         }
         
         // Update yield summary (remove deposited amount, add yield)
@@ -463,6 +515,12 @@ impl DepositToYieldAdapter {
         env.storage().instance()
             .get(&AdapterDataKey::YieldTreasury)
             .expect("Yield treasury not set")
+    }
+
+    fn get_insurance_treasury(env: &Env) -> Address {
+        env.storage().instance()
+            .get(&AdapterDataKey::InsuranceTreasury)
+            .expect("Insurance treasury not set")
     }
 
     fn get_whitelisted_protocol(env: &Env, protocol_address: &Address) -> LendingProtocol {

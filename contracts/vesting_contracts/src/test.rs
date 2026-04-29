@@ -2,7 +2,7 @@
 
 use crate::{
     BatchCreateData, VestingContract, VestingContractClient,
-    AssetAllocationEntry,
+    AssetAllocationEntry, BeneficiarySplit, GroupScheduleConfig,
 };
 use soroban_sdk::{
     testutils::{Address as _, Ledger},
@@ -159,6 +159,188 @@ fn test_batch_operations() {
     assert_eq!(ids.len(), 2);
     assert_eq!(ids.get(0).unwrap(), 1);
     assert_eq!(ids.get(1).unwrap(), 2);
+}
+
+#[test]
+fn test_add_group_schedule_split_happy_path() {
+    let (env, admin, client, token_address, _) = setup();
+    let b1 = Address::generate(&env);
+    let b2 = Address::generate(&env);
+    let now = env.ledger().timestamp();
+
+    // Prefund contract balance so batch-style checks pass.
+    let _prefund_vault = client.create_vault_full(
+        &admin,
+        &1000i128,
+        &now,
+        &(now + 1000),
+        &0i128,
+        &true,
+        &true,
+        &0u64,
+    );
+
+    let basket = vec![&env, AssetAllocationEntry {
+        asset_id: token_address,
+        total_amount: 1000,
+        released_amount: 0,
+        locked_amount: 0,
+        percentage: 10000,
+    }];
+
+    let splits = vec![
+        &env,
+        BeneficiarySplit { beneficiary: b1.clone(), share_bps: 6000 },
+        BeneficiarySplit { beneficiary: b2.clone(), share_bps: 4000 },
+    ];
+
+    let cfg = GroupScheduleConfig {
+        beneficiaries: splits,
+        asset_basket: basket,
+        start_time: now,
+        end_time: now + 1000,
+        keeper_fee: 0,
+        is_revocable: true,
+        is_transferable: false,
+        step_duration: 0,
+    };
+
+    let ids = client.add_group_schedule_split(&cfg);
+    assert_eq!(ids.len(), 2);
+
+    let v1 = client.get_vault(&ids.get(0).unwrap());
+    let v2 = client.get_vault(&ids.get(1).unwrap());
+
+    assert_eq!(v1.owner, b1);
+    assert_eq!(v1.allocations.get(0).unwrap().total_amount, 600);
+    assert_eq!(v2.owner, b2);
+    assert_eq!(v2.allocations.get(0).unwrap().total_amount, 400);
+}
+
+#[test]
+fn test_add_group_schedule_split_preserves_total_with_rounding() {
+    let (env, admin, client, token_address, _) = setup();
+    let b1 = Address::generate(&env);
+    let b2 = Address::generate(&env);
+    let now = env.ledger().timestamp();
+
+    let _prefund_vault = client.create_vault_full(
+        &admin,
+        &5i128,
+        &now,
+        &(now + 1000),
+        &0i128,
+        &true,
+        &true,
+        &0u64,
+    );
+
+    let basket = vec![&env, AssetAllocationEntry {
+        asset_id: token_address,
+        total_amount: 5,
+        released_amount: 0,
+        locked_amount: 0,
+        percentage: 10000,
+    }];
+
+    let splits = vec![
+        &env,
+        BeneficiarySplit { beneficiary: b1, share_bps: 5000 },
+        BeneficiarySplit { beneficiary: b2, share_bps: 5000 },
+    ];
+
+    let cfg = GroupScheduleConfig {
+        beneficiaries: splits,
+        asset_basket: basket,
+        start_time: now,
+        end_time: now + 1000,
+        keeper_fee: 0,
+        is_revocable: true,
+        is_transferable: false,
+        step_duration: 0,
+    };
+
+    let ids = client.add_group_schedule_split(&cfg);
+    let v1 = client.get_vault(&ids.get(0).unwrap());
+    let v2 = client.get_vault(&ids.get(1).unwrap());
+
+    // Deterministic remainder handling: first beneficiary receives the extra unit.
+    assert_eq!(v1.allocations.get(0).unwrap().total_amount, 3);
+    assert_eq!(v2.allocations.get(0).unwrap().total_amount, 2);
+
+    let total = v1.allocations.get(0).unwrap().total_amount + v2.allocations.get(0).unwrap().total_amount;
+    assert_eq!(total, 5);
+}
+
+#[test]
+#[should_panic(expected = "Beneficiary shares must sum to 10000")]
+fn test_add_group_schedule_split_rejects_invalid_share_total() {
+    let (env, _admin, client, token_address, _) = setup();
+    let b1 = Address::generate(&env);
+    let b2 = Address::generate(&env);
+    let now = env.ledger().timestamp();
+
+    let basket = vec![&env, AssetAllocationEntry {
+        asset_id: token_address,
+        total_amount: 1000,
+        released_amount: 0,
+        locked_amount: 0,
+        percentage: 10000,
+    }];
+
+    let splits = vec![
+        &env,
+        BeneficiarySplit { beneficiary: b1, share_bps: 7000 },
+        BeneficiarySplit { beneficiary: b2, share_bps: 2000 },
+    ];
+
+    let cfg = GroupScheduleConfig {
+        beneficiaries: splits,
+        asset_basket: basket,
+        start_time: now,
+        end_time: now + 1000,
+        keeper_fee: 0,
+        is_revocable: true,
+        is_transferable: false,
+        step_duration: 0,
+    };
+
+    let _ = client.add_group_schedule_split(&cfg);
+}
+
+#[test]
+#[should_panic(expected = "Duplicate beneficiary in split")]
+fn test_add_group_schedule_split_rejects_duplicate_beneficiary() {
+    let (env, _admin, client, token_address, _) = setup();
+    let b1 = Address::generate(&env);
+    let now = env.ledger().timestamp();
+
+    let basket = vec![&env, AssetAllocationEntry {
+        asset_id: token_address,
+        total_amount: 1000,
+        released_amount: 0,
+        locked_amount: 0,
+        percentage: 10000,
+    }];
+
+    let splits = vec![
+        &env,
+        BeneficiarySplit { beneficiary: b1.clone(), share_bps: 5000 },
+        BeneficiarySplit { beneficiary: b1, share_bps: 5000 },
+    ];
+
+    let cfg = GroupScheduleConfig {
+        beneficiaries: splits,
+        asset_basket: basket,
+        start_time: now,
+        end_time: now + 1000,
+        keeper_fee: 0,
+        is_revocable: true,
+        is_transferable: false,
+        step_duration: 0,
+    };
+
+    let _ = client.add_group_schedule_split(&cfg);
 }
 
 #[test]

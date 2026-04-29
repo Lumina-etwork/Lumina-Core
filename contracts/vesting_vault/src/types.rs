@@ -895,3 +895,92 @@ pub struct AllocationLimitExceeded {
     pub max_limit: i128,
     pub rejected_at: u64,
 }
+
+// ========== ISSUE #280: Smart Contract Sunset and State Migration Hooks ==========
+
+/// 30 days in seconds for sunset timelock
+pub const SUNSET_TIMELOCK_DURATION: u64 = 2_592_000;
+
+#[contracttype]
+#[derive(Clone)]
+pub struct ProtocolSunset {
+    /// Whether sunset has been initiated
+    pub is_initiated: bool,
+    /// Timestamp when sunset was initiated
+    pub initiated_at: u64,
+    /// Timestamp when sunset becomes effective (30 days later)
+    pub effective_at: u64,
+    /// Address of the V3 contract to migrate to
+    pub migration_target: Address,
+    /// Whether sunset has been aborted
+    pub is_aborted: bool,
+    /// Whether new schedule creation is halted
+    pub new_schedules_halted: bool,
+}
+
+#[contracttype]
+#[derive(Clone)]
+pub struct MigrationPayload {
+    /// Beneficiary address
+    pub beneficiary: Address,
+    /// Vesting schedule ID
+    pub vesting_id: u32,
+    /// Total grant amount
+    pub total_amount: i128,
+    /// Amount already claimed
+    pub claimed_amount: i128,
+    /// Remaining unvested amount
+    pub remaining_amount: i128,
+    /// Vesting start timestamp
+    pub start_time: u64,
+    /// Vesting end timestamp
+    pub end_time: u64,
+    /// Hash of the payload for verification
+    pub payload_hash: BytesN<32>,
+    /// Timestamp when payload was exported
+    pub exported_at: u64,
+}
+
+#[contracttype]
+#[derive(Clone)]
+pub struct RelayerMigration {
+    /// Beneficiary address being migrated
+    pub beneficiary: Address,
+    /// Vesting schedule ID
+    pub vesting_id: u32,
+    /// Migration payload hash
+    pub payload_hash: BytesN<32>,
+    /// Whether migration has been completed
+    pub is_completed: bool,
+    /// Timestamp of migration
+    pub migrated_at: u64,
+}
+
+#[contractevent]
+#[derive(Clone)]
+pub struct SunsetInitiated {
+    #[topic]
+    pub initiated_by: Address,
+    pub migration_target: Address,
+    pub initiated_at: u64,
+    pub effective_at: u64,
+}
+
+#[contractevent]
+#[derive(Clone)]
+pub struct SunsetAborted {
+    #[topic]
+    pub aborted_by: Address,
+    pub aborted_at: u64,
+}
+
+#[contractevent]
+#[derive(Clone)]
+pub struct StateMigrated {
+    #[topic]
+    pub beneficiary: Address,
+    #[topic]
+    pub vesting_id: u32,
+    pub payload_hash: BytesN<32>,
+    pub migrated_at: u64,
+}

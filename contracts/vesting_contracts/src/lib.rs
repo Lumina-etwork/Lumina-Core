@@ -280,6 +280,7 @@ pub struct VestingScheduleLeaf {
 pub enum AdminAction {
     RevokeSchedule(u64, Address),
     AddBeneficiary(Address, ScheduleConfig),
+    AddGroupScheduleSplit(GroupScheduleConfig),
     RemoveAdmin(Address),
     AddAdmin(Address),
     UpdateQuorum(u32),
@@ -448,6 +449,26 @@ pub struct ScheduleConfig {
     pub keeper_fee: i128,
     pub is_revocable: bool,
     pub is_transferable: bool,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct BeneficiarySplit {
+    pub beneficiary: Address,
+    pub share_bps: u32, // 10000 = 100%
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct GroupScheduleConfig {
+    pub beneficiaries: Vec<BeneficiarySplit>,
+    pub asset_basket: Vec<AssetAllocationEntry>,
+    pub start_time: u64,
+    pub end_time: u64,
+    pub keeper_fee: i128,
+    pub is_revocable: bool,
+    pub is_transferable: bool,
+    pub step_duration: u64,
 }
 
 #[contractevent]
@@ -687,6 +708,9 @@ impl VestingContract {
                     0, // Default step_duration
                     true,
                 );
+            },
+            AdminAction::AddGroupScheduleSplit(cfg) => {
+                let _ids = Self::add_group_schedule_split_internal(&env, cfg);
             },
             AdminAction::GrantManagerRights(manager, asset, amount) => {
                 let pool = SubAdminPool {
@@ -1175,6 +1199,39 @@ impl VestingContract {
                 s.is_transferable,
                 0, // step_duration
                 true
+            );
+            ids.push_back(id);
+        }
+        ids
+    }
+
+    /// Create one group schedule and split it across multiple beneficiaries by basis points.
+    /// Uses deterministic integer math and remainder distribution so total amounts are conserved.
+    pub fn add_group_schedule_split(env: Env, config: GroupScheduleConfig) -> Vec<u64> {
+        Self::require_admin(&env);
+        if Self::multisig_active(&env) { panic!("Use AdminProposal for multisig"); }
+        Self::add_group_schedule_split_internal(&env, config)
+    }
+
+    fn add_group_schedule_split_internal(env: &Env, config: GroupScheduleConfig) -> Vec<u64> {
+        let total_amount = Self::validate_group_schedule_config(&config);
+        Self::require_deposited_tokens_for_batch(env, total_amount);
+        Self::reserve_admin_balance_for_batch(env, total_amount);
+
+        let mut ids = Vec::new(env);
+        for split in config.beneficiaries.iter() {
+            let split_basket = Self::build_split_basket(env, &config.asset_basket, &config.beneficiaries, &split.beneficiary);
+            let id = Self::create_vault_prefunded_internal(
+                env,
+                split.beneficiary,
+                split_basket,
+                config.start_time,
+                config.end_time,
+                config.keeper_fee,
+                config.is_revocable,
+                config.is_transferable,
+                config.step_duration,
+                true,
             );
             ids.push_back(id);
         }
@@ -3509,6 +3566,115 @@ impl VestingContract {
         total_amount
     }
 
+    fn validate_group_schedule_config(config: &GroupScheduleConfig) -> i128 {
+        if config.beneficiaries.is_empty() {
+            panic!("Empty beneficiary split");
+        }
+
+        let mut total_share_bps: u32 = 0;
+        for (i, split) in config.beneficiaries.iter().enumerate() {
+            if split.share_bps == 0 {
+                panic!("Beneficiary share must be greater than 0");
+            }
+
+            for j in (i + 1)..config.beneficiaries.len() {
+                let other = config.beneficiaries.get(j).unwrap();
+                if split.beneficiary == other.beneficiary {
+                    panic!("Duplicate beneficiary in split");
+                }
+            }
+
+            total_share_bps = total_share_bps
+                .checked_add(split.share_bps)
+                .expect("Split share overflow");
+        }
+
+        if total_share_bps != 10000 {
+            panic!("Beneficiary shares must sum to 10000");
+        }
+
+        Self::require_valid_duration(config.start_time, config.end_time);
+
+        let mut total_amount: i128 = 0;
+        for allocation in config.asset_basket.iter() {
+            if allocation.total_amount < 0 {
+                panic!("Invalid amount");
+            }
+            total_amount = total_amount
+                .checked_add(allocation.total_amount)
+                .expect("Group schedule amount overflow");
+        }
+
+        total_amount
+    }
+
+    fn build_split_basket(
+        env: &Env,
+        base_basket: &Vec<AssetAllocationEntry>,
+        splits: &Vec<BeneficiarySplit>,
+        beneficiary: &Address,
+    ) -> Vec<AssetAllocationEntry> {
+        let mut split_basket = Vec::new(env);
+
+        let beneficiary_index = Self::find_beneficiary_index(splits, beneficiary);
+        for allocation in base_basket.iter() {
+            let split_amounts = Self::split_amount_by_bps(env, allocation.total_amount, splits);
+            let beneficiary_amount = split_amounts.get(beneficiary_index).unwrap();
+
+            let split_allocation = AssetAllocationEntry {
+                asset_id: allocation.asset_id,
+                total_amount: beneficiary_amount,
+                released_amount: 0,
+                locked_amount: 0,
+                percentage: allocation.percentage,
+            };
+            split_basket.push_back(split_allocation);
+        }
+
+        split_basket
+    }
+
+    fn find_beneficiary_index(splits: &Vec<BeneficiarySplit>, beneficiary: &Address) -> u32 {
+        for (i, split) in splits.iter().enumerate() {
+            if split.beneficiary == *beneficiary {
+                return i.try_into().unwrap();
+            }
+        }
+        panic!("Beneficiary not found in split");
+    }
+
+    fn split_amount_by_bps(env: &Env, total_amount: i128, splits: &Vec<BeneficiarySplit>) -> Vec<i128> {
+        let mut amounts = Vec::new(env);
+        let mut distributed = 0i128;
+
+        for split in splits.iter() {
+            let product = total_amount
+                .checked_mul(split.share_bps as i128)
+                .expect("Split multiplication overflow");
+            let amount = product / 10000i128;
+            amounts.push_back(amount);
+            distributed = distributed
+                .checked_add(amount)
+                .expect("Split accumulation overflow");
+        }
+
+        let mut remainder = total_amount - distributed;
+        let split_count = amounts.len();
+        if split_count == 0 {
+            panic!("Empty beneficiary split");
+        }
+
+        let mut idx = 0u32;
+        while remainder > 0 {
+            let current = amounts.get(idx).unwrap();
+            amounts.set(idx, current + 1);
+            remainder -= 1;
+            idx = if idx + 1 == split_count { 0 } else { idx + 1 };
+        }
+
+        amounts
+    }
+
     fn add_user_vault_index(env: &Env, user: &Address, id: u64) {
         let mut vaults: Vec<u64> = env
             .storage()
@@ -5437,6 +5603,7 @@ impl VestingContract {
     // Private helper methods for legal document integration
 
 // Redefinition removed
+}
 
 #[cfg(test)]
 mod test;

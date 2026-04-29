@@ -1,0 +1,14 @@
+[package]
+name    = "analytics-adapter"
+version = "0.1.0"
+edition = "2021"
+description = "Read-only analytics adapter for Vesting-Vault — Issue #279"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+soroban-sdk = { version = "25.3.1" }
+
+[dev-dependencies]
+soroban-sdk = { version = "25.3.1", features = ["testutils"] }

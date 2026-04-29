@@ -6,6 +6,7 @@ members = [
     "contracts/vesting_status_nft",
     "contracts/vesting_vault",
     "contracts/deposit_to_yield_adapter",
+    "contracts/insurance_treasury",
 ]
 resolver = "2"
 
