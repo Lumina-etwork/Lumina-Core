@@ -10,7 +10,7 @@ pub mod errors;
 
 pub use types::*;
 use errors::Error;
-use storage::{get_claim_history, set_claim_history, get_authorized_payout_address as storage_get_authorized_payout_address, set_authorized_payout_address as storage_set_authorized_payout_address, get_pending_address_request as storage_get_pending_address_request, set_pending_address_request as storage_set_pending_address_request, remove_pending_address_request as storage_remove_pending_address_request, get_timelock_duration, get_auditors, set_auditors, get_auditor_pause_requests, set_auditor_pause_requests, get_emergency_pause, set_emergency_pause, remove_emergency_pause, get_reputation_bridge_contract, set_reputation_bridge_contract, has_reputation_bonus_applied, set_reputation_bonus_applied, get_milestone_configs, set_milestone_configs, get_milestone_status, set_milestone_status, get_emergency_pause_duration, is_nullifier_used, set_nullifier_used, get_commitment, set_commitment, mark_commitment_used, add_privacy_claim_event, add_merkle_root, get_merkle_roots, is_valid_merkle_root, get_path_payment_config, set_path_payment_config, get_path_payment_claim_history, add_path_payment_claim_event, get_lst_config, set_lst_config, get_unvested_balance, set_unvested_balance, get_admin_dead_man_switch, set_admin_dead_man_switch, get_oracle_price_record, set_oracle_price_record, get_contract_total_unvested, set_contract_total_unvested};
+use storage::{get_claim_history, set_claim_history, get_authorized_payout_address as storage_get_authorized_payout_address, set_authorized_payout_address as storage_set_authorized_payout_address, get_pending_address_request as storage_get_pending_address_request, set_pending_address_request as storage_set_pending_address_request, remove_pending_address_request as storage_remove_pending_address_request, get_timelock_duration, get_auditors, set_auditors, get_auditor_pause_requests, set_auditor_pause_requests, get_emergency_pause, set_emergency_pause, remove_emergency_pause, get_reputation_bridge_contract, set_reputation_bridge_contract, has_reputation_bonus_applied, set_reputation_bonus_applied, get_milestone_configs, set_milestone_configs, get_milestone_status, set_milestone_status, get_emergency_pause_duration, is_nullifier_used, set_nullifier_used, get_commitment, set_commitment, mark_commitment_used, add_privacy_claim_event, add_merkle_root, get_merkle_roots, is_valid_merkle_root, get_path_payment_config, set_path_payment_config, get_path_payment_claim_history, add_path_payment_claim_event, get_lst_config, set_lst_config, get_unvested_balance, set_unvested_balance, get_admin_dead_man_switch, set_admin_dead_man_switch, get_oracle_price_record, set_oracle_price_record, get_contract_total_unvested, set_contract_total_unvested, get_protocol_sunset, set_protocol_sunset, get_migration_payload, set_migration_payload, get_relayer_migration, set_relayer_migration};
 use emergency::{AuditorPauseRequest, EmergencyPause, EmergencyPauseTriggered};
 
 #[contract]
@@ -2207,5 +2207,217 @@ impl VestingVault {
         }
         set_contract_total_unvested(&e, new_total);
         Ok(())
+    }
+
+    // ========== ISSUE #280: Smart Contract Sunset and State Migration Hooks ==========
+
+    /// Initiates protocol sunset with 30-day timelock
+    /// This function halts new schedule creation while allowing existing claims
+    /// Requires admin authentication and starts the sunset process
+    pub fn prepare_protocol_sunset(e: Env, admin: Address, migration_target: Address) -> Result<(), Error> {
+        admin.require_auth();
+
+        // Check if sunset already initiated
+        if let Some(sunset) = get_protocol_sunset(&e) {
+            if sunset.is_initiated && !sunset.is_aborted {
+                return Err(Error::InvalidInput); // Already initiated
+            }
+        }
+
+        let current_time = e.ledger().timestamp();
+        let effective_at = current_time + SUNSET_TIMELOCK_DURATION;
+
+        let sunset = ProtocolSunset {
+            is_initiated: true,
+            initiated_at: current_time,
+            effective_at,
+            migration_target,
+            is_aborted: false,
+            new_schedules_halted: true, // Immediately halt new schedules
+        };
+
+        set_protocol_sunset(&e, &sunset);
+
+        // Emit event
+        SunsetInitiated {
+            initiated_by: admin,
+            migration_target,
+            initiated_at: current_time,
+            effective_at,
+        }.publish(&e);
+
+        Ok(())
+    }
+
+    /// Aborts the sunset process if called before the timelock expires
+    /// Allows the protocol to resume normal operations
+    pub fn abort_protocol_sunset(e: Env, admin: Address) -> Result<(), Error> {
+        admin.require_auth();
+
+        let current_time = e.ledger().timestamp();
+
+        if let Some(mut sunset) = get_protocol_sunset(&e) {
+            if !sunset.is_initiated || sunset.is_aborted {
+                return Err(Error::InvalidInput);
+            }
+
+            // Check if timelock has expired
+            if current_time >= sunset.effective_at {
+                return Err(Error::InvalidInput); // Cannot abort after effective
+            }
+
+            sunset.is_aborted = true;
+            sunset.new_schedules_halted = false; // Resume normal operations
+
+            set_protocol_sunset(&e, &sunset);
+
+            // Emit event
+            SunsetAborted {
+                aborted_by: admin,
+                aborted_at: current_time,
+            }.publish(&e);
+
+            Ok(())
+        } else {
+            Err(Error::InvalidInput)
+        }
+    }
+
+    /// Exports authenticated state payload for migration
+    /// Creates a compressed hash of the user's vesting data for V3 reconstruction
+    pub fn export_state_payload(e: Env, user: Address, vesting_id: u32) -> Result<BytesN<32>, Error> {
+        user.require_auth();
+
+        // Check if sunset is initiated
+        if let Some(sunset) = get_protocol_sunset(&e) {
+            if !sunset.is_initiated || sunset.is_aborted {
+                return Err(Error::InvalidInput); // Sunset not active
+            }
+        } else {
+            return Err(Error::InvalidInput); // No sunset initiated
+        }
+
+        // TODO: Get actual vesting data - this is a placeholder
+        // In real implementation, fetch:
+        // - total_amount
+        // - claimed_amount
+        // - start_time
+        // - end_time
+        let total_amount = 10000i128; // Placeholder
+        let claimed_amount = 2500i128; // Placeholder
+        let remaining_amount = total_amount - claimed_amount;
+        let start_time = 1609459200u64; // Placeholder timestamp
+        let end_time = 1672531200u64; // Placeholder timestamp
+
+        let current_time = e.ledger().timestamp();
+
+        // Create payload
+        let payload = MigrationPayload {
+            beneficiary: user.clone(),
+            vesting_id,
+            total_amount,
+            claimed_amount,
+            remaining_amount,
+            start_time,
+            end_time,
+            payload_hash: BytesN::from_array(&e, &[0u8; 32]), // Placeholder
+            exported_at: current_time,
+        };
+
+        // Generate hash of the payload
+        let mut data = Vec::new(&e);
+        data.push_back(user.clone().into_val(&e));
+        data.push_back(vesting_id.into_val(&e));
+        data.push_back(total_amount.into_val(&e));
+        data.push_back(claimed_amount.into_val(&e));
+        data.push_back(remaining_amount.into_val(&e));
+        data.push_back(start_time.into_val(&e));
+        data.push_back(end_time.into_val(&e));
+
+        let payload_hash = e.crypto().sha256(&data);
+
+        // Update payload with hash
+        let mut payload_with_hash = payload;
+        payload_with_hash.payload_hash = payload_hash.clone();
+
+        // Store the payload
+        set_migration_payload(&e, &user, vesting_id, &payload_with_hash);
+
+        Ok(payload_hash)
+    }
+
+    /// Relayer hook for mass-migrating active accounts
+    /// Called by authorized relayer to migrate users who haven't manually migrated
+    pub fn relayer_migrate_account(e: Env, relayer: Address, beneficiary: Address, vesting_id: u32, payload_hash: BytesN<32>) -> Result<(), Error> {
+        relayer.require_auth();
+
+        // TODO: Verify relayer authorization - placeholder
+        // In real implementation, check if relayer is authorized
+
+        // Check if sunset is effective
+        let current_time = e.ledger().timestamp();
+        if let Some(sunset) = get_protocol_sunset(&e) {
+            if !sunset.is_initiated || sunset.is_aborted || current_time < sunset.effective_at {
+                return Err(Error::InvalidInput);
+            }
+        } else {
+            return Err(Error::InvalidInput);
+        }
+
+        // Verify payload exists and matches
+        if let Some(payload) = get_migration_payload(&e, &beneficiary, vesting_id) {
+            if payload.payload_hash != payload_hash {
+                return Err(Error::InvalidInput);
+            }
+        } else {
+            return Err(Error::InvalidInput);
+        }
+
+        // Check if already migrated
+        if let Some(migration) = get_relayer_migration(&e, &beneficiary, vesting_id) {
+            if migration.is_completed {
+                return Err(Error::InvalidInput);
+            }
+        }
+
+        // Create migration record
+        let migration = RelayerMigration {
+            beneficiary: beneficiary.clone(),
+            vesting_id,
+            payload_hash,
+            is_completed: true,
+            migrated_at: current_time,
+        };
+
+        set_relayer_migration(&e, &beneficiary, vesting_id, &migration);
+
+        // Emit event
+        StateMigrated {
+            beneficiary,
+            vesting_id,
+            payload_hash,
+            migrated_at: current_time,
+        }.publish(&e);
+
+        Ok(())
+    }
+
+    /// Query function to get protocol sunset status
+    pub fn get_protocol_sunset_status(e: Env) -> Option<ProtocolSunset> {
+        get_protocol_sunset(&e)
+    }
+
+    /// Query function to get migration payload for a user
+    pub fn get_migration_payload(e: Env, beneficiary: Address, vesting_id: u32) -> Option<MigrationPayload> {
+        get_migration_payload(&e, &beneficiary, vesting_id)
+    }
+
+    /// Query function to check if account has been migrated
+    pub fn is_account_migrated(e: Env, beneficiary: Address, vesting_id: u32) -> bool {
+        if let Some(migration) = get_relayer_migration(&e, &beneficiary, vesting_id) {
+            migration.is_completed
+        } else {
+            false
+        }
     }
 }

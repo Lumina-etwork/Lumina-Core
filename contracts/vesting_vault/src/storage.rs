@@ -49,6 +49,11 @@ pub const USER_LST_SHARES: &str = "USER_LST_SHARES";
 pub const UNBONDING_REQUESTS: &str = "UNBONDING_REQUESTS";
 pub const UNBONDING_QUEUE: &str = "UNBONDING_QUEUE";
 
+// Protocol Sunset and Migration storage keys (Issue #280)
+pub const PROTOCOL_SUNSET: &str = "PROTOCOL_SUNSET";
+pub const MIGRATION_PAYLOADS: &str = "MIGRATION_PAYLOADS";
+pub const RELAYER_MIGRATIONS: &str = "RELAYER_MIGRATIONS";
+
 // 48 hours in seconds
 const TIMELOCK_DURATION: u64 = 172_800;
 
@@ -562,4 +567,30 @@ pub fn add_stream_pause_to_history(e: &Env, pause: &StreamPause) {
     let mut history = get_stream_pause_history(e);
     history.push_back(pause.clone());
     e.storage().instance().set(&STREAM_PAUSE_HISTORY, &history);
+}
+
+// ========== ISSUE #280: Protocol Sunset and Migration Functions ==========
+
+pub fn get_protocol_sunset(e: &Env) -> Option<crate::types::ProtocolSunset> {
+    e.storage().instance().get(&PROTOCOL_SUNSET)
+}
+
+pub fn set_protocol_sunset(e: &Env, sunset: &crate::types::ProtocolSunset) {
+    e.storage().instance().set(&PROTOCOL_SUNSET, sunset);
+}
+
+pub fn get_migration_payload(e: &Env, beneficiary: &Address, vesting_id: u32) -> Option<crate::types::MigrationPayload> {
+    e.storage().instance().get(&(MIGRATION_PAYLOADS, beneficiary.clone(), vesting_id))
+}
+
+pub fn set_migration_payload(e: &Env, beneficiary: &Address, vesting_id: u32, payload: &crate::types::MigrationPayload) {
+    e.storage().instance().set(&(MIGRATION_PAYLOADS, beneficiary.clone(), vesting_id), payload);
+}
+
+pub fn get_relayer_migration(e: &Env, beneficiary: &Address, vesting_id: u32) -> Option<crate::types::RelayerMigration> {
+    e.storage().instance().get(&(RELAYER_MIGRATIONS, beneficiary.clone(), vesting_id))
+}
+
+pub fn set_relayer_migration(e: &Env, beneficiary: &Address, vesting_id: u32, migration: &crate::types::RelayerMigration) {
+    e.storage().instance().set(&(RELAYER_MIGRATIONS, beneficiary.clone(), vesting_id), migration);
 }
