@@ -58,7 +58,7 @@ pub struct CertificateQueryResult {
     pub page_size: u64,
 }
 
-#[contractevent]
+#[event]
 pub struct CertificateIssued {
     #[topic]
     pub certificate_id: U256,
@@ -69,7 +69,7 @@ pub struct CertificateIssued {
     pub loyalty_score: u32,
 }
 
-#[contractevent]
+#[event]
 pub struct WorkVerified {
     #[topic]
     pub certificate_id: U256,
