@@ -28,7 +28,7 @@ pub struct UnwrapEvent {
 }
 
 // Events
-#[contractevent]
+#[event]
 #[derive(Clone, Debug)]
 pub struct Initialized {
     #[topic]
@@ -38,7 +38,7 @@ pub struct Initialized {
     pub timestamp: u64,
 }
 
-#[contractevent]
+#[event]
 #[derive(Clone, Debug)]
 pub struct LockupConfigured {
     #[topic]
@@ -47,7 +47,7 @@ pub struct LockupConfigured {
     pub timestamp: u64,
 }
 
-#[contractevent]
+#[event]
 #[derive(Clone, Debug)]
 pub struct WrappedTokensIssued {
     #[topic]
@@ -59,7 +59,7 @@ pub struct WrappedTokensIssued {
     pub timestamp: u64,
 }
 
-#[contractevent]
+#[event]
 #[derive(Clone, Debug)]
 pub struct TokensUnwrapped {
     #[topic]
@@ -70,7 +70,7 @@ pub struct TokensUnwrapped {
     pub timestamp: u64,
 }
 
-#[contractevent]
+#[event]
 #[derive(Clone, Debug)]
 pub struct AuthorizedMinterAdded {
     #[topic]
@@ -78,7 +78,7 @@ pub struct AuthorizedMinterAdded {
     pub timestamp: u64,
 }
 
-#[contractevent]
+#[event]
 #[derive(Clone, Debug)]
 pub struct AuthorizedMinterRemoved {
     #[topic]
