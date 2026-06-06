@@ -11,7 +11,7 @@ members = [
 resolver = "2"
 
 [workspace.dependencies]
-soroban-sdk = { version = "21" }
+soroban-sdk = { version = "22" }
 
 [profile.release]
 opt-level = "z"
