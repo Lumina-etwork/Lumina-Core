@@ -1076,13 +1076,13 @@ impl VestingContract {
     /// Propose a contract upgrade via the 72-hour governance challenge period.
     ///
     /// Returns the new proposal ID.
-    pub fn propose_contract_upgrade(env: Env, new_contract: Address) -> u64 {
+    pub fn propose_contract_upgrade(env: Env, new_contract: Address) -> Result<u64, Error> {
         Self::require_admin(&env);
         Self::create_governance_proposal(env, GovernanceAction::ContractUpgrade(new_contract))
     }
 
     /// Accept a pending admin-rotation proposal (called by the proposed new admin).
-    pub fn accept_ownership(env: Env) {
+    pub fn accept_ownership(env: Env) -> Result<(), Error> {
         let proposed: Address = env
             .storage()
             .instance()
@@ -1093,12 +1093,13 @@ impl VestingContract {
             .instance()
             .set(&DataKey::AdminAddress, &proposed);
         env.storage().instance().remove(&DataKey::ProposedAdmin);
+        Ok(())
     }
 
     /// Propose an emergency pause or resume via the governance challenge period.
     ///
     /// Returns the new proposal ID.
-    pub fn propose_emergency_pause(env: Env, pause_state: bool) -> u64 {
+    pub fn propose_emergency_pause(env: Env, pause_state: bool) -> Result<u64, Error> {
         Self::require_admin(&env);
         Self::create_governance_proposal(env, GovernanceAction::EmergencyPause(pause_state))
     }
@@ -1210,7 +1211,7 @@ impl VestingContract {
 
     // Legacy pause function - now requires governance proposal
     /// Toggle the global contract pause state (admin only).
-    pub fn toggle_pause(env: Env) {
+    pub fn toggle_pause(env: Env) -> Result<(), Error> {
         Self::require_admin(&env);
         if Self::multisig_active(&env) {
             return Err(Error::MultisigNotActive);
@@ -2958,7 +2959,7 @@ impl VestingContract {
     }
 
     /// Set the collateral bridge contract address (must be done via AdminProposal).
-    pub fn set_collateral_bridge(_env: Env, _bridge_address: Address) {
+    pub fn set_collateral_bridge(_env: Env, _bridge_address: Address) -> Result<(), Error> {
         return Err(Error::MultisigNotActive);
     }
 
@@ -3350,7 +3351,7 @@ impl VestingContract {
         }
 
         stake::emit_yield_claimed(&env, vault_id, &Self::get_admin(env.clone()), yield_amount);
-        yield_amount
+        Ok(yield_amount)
     }
 
     /// Batch revoke multiple vaults in a single atomic transaction.
