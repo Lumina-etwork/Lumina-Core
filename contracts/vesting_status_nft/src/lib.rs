@@ -15,7 +15,7 @@ pub enum DataKey {
     UserBadge(Address),
 }
 
-#[contractevent]
+#[event]
 pub struct MintEvent {
     #[topic]
     pub user: Address,
