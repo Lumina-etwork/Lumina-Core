@@ -460,7 +460,7 @@ impl RegulatedAssetManager {
 }
 
 /// Events for SEP-08 regulated assets
-#[contractevent]
+#[event]
 pub struct AssetRegistered {
     #[topic]
     pub asset_id: Address,
@@ -471,7 +471,7 @@ pub struct AssetRegistered {
     pub supports_clawback: bool,
 }
 
-#[contractevent]
+#[event]
 pub struct AuthorizationCreated {
     #[topic]
     pub asset_id: Address,
@@ -485,7 +485,7 @@ pub struct AuthorizationCreated {
     pub issuer: Address,
 }
 
-#[contractevent]
+#[event]
 pub struct AuthorizationConsumed {
     #[topic]
     pub authorization_id: BytesN<32>,
@@ -493,7 +493,7 @@ pub struct AuthorizationConsumed {
     pub remaining: i128,
 }
 
-#[contractevent]
+#[event]
 pub struct AuthorizationRevoked {
     #[topic]
     pub authorization_id: BytesN<32>,
@@ -502,7 +502,7 @@ pub struct AuthorizationRevoked {
     pub reason: String,
 }
 
-#[contractevent]
+#[event]
 pub struct AssetFrozen {
     #[topic]
     pub asset_id: Address,
@@ -512,7 +512,7 @@ pub struct AssetFrozen {
     pub reason: String,
 }
 
-#[contractevent]
+#[event]
 pub struct AssetClawback {
     #[topic]
     pub asset_id: Address,
