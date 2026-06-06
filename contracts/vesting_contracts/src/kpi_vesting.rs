@@ -55,7 +55,7 @@ pub fn attach_kpi_gate(
     }.publish(env);
 }
 
-#[contractevent]
+#[event]
 pub struct KpiSetEvent {
     #[topic]
     pub vault_id: u64,
