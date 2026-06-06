@@ -43,7 +43,7 @@ pub struct StakeRecord {
     pub is_active: bool,
 }
 
-#[contractevent]
+#[event]
 #[derive(Clone)]
 pub struct StakedEvent {
     #[topic]
@@ -52,7 +52,7 @@ pub struct StakedEvent {
     pub amount: i128,
 }
 
-#[contractevent]
+#[event]
 #[derive(Clone)]
 pub struct UnstakedEvent {
     #[topic]
@@ -61,7 +61,7 @@ pub struct UnstakedEvent {
     pub amount: i128,
 }
 
-#[contractevent]
+#[event]
 #[derive(Clone)]
 pub struct SlashedEvent {
     #[topic]
