@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use crate::types::*;
 
 const MAX_CACHED_HEADERS: usize = 256;

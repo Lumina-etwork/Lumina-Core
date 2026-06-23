@@ -1,52 +1,37 @@
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use core::sync::atomic::{AtomicI64, Ordering};
 
 use crate::types::ChainId;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Metrics {
-    inner: Arc<Mutex<MetricsInner>>,
-}
-
-#[derive(Debug, Default)]
-struct MetricsInner {
-    chain_finality_lag_ms: HashMap<ChainId, i64>,
-    chain_sync_backoff_ms: HashMap<ChainId, i64>,
+    chain_finality_lag_ms: AtomicI64,
+    chain_sync_backoff_ms: AtomicI64,
 }
 
 impl Metrics {
     pub fn new() -> Self {
         Self {
-            inner: Arc::new(Mutex::new(MetricsInner::default())),
+            chain_finality_lag_ms: AtomicI64::new(-1),
+            chain_sync_backoff_ms: AtomicI64::new(-1),
         }
     }
 
-    pub fn record_chain_finality_lag_ms(&self, chain_id: ChainId, lag_ms: i64) {
-        tracing::debug!(chain_id = chain_id, lag_ms = lag_ms, "chain finality lag");
-        if let Ok(mut inner) = self.inner.lock() {
-            inner.chain_finality_lag_ms.insert(chain_id, lag_ms);
-        }
+    pub fn record_chain_finality_lag_ms(&self, _chain_id: ChainId, lag_ms: i64) {
+        self.chain_finality_lag_ms.store(lag_ms, Ordering::Release);
     }
 
-    pub fn record_chain_sync_backoff_ms(&self, chain_id: ChainId, backoff_ms: i64) {
-        tracing::debug!(chain_id = chain_id, backoff_ms = backoff_ms, "chain sync backoff");
-        if let Ok(mut inner) = self.inner.lock() {
-            inner.chain_sync_backoff_ms.insert(chain_id, backoff_ms);
-        }
+    pub fn record_chain_sync_backoff_ms(&self, _chain_id: ChainId, backoff_ms: i64) {
+        self.chain_sync_backoff_ms.store(backoff_ms, Ordering::Release);
     }
 
-    pub fn finality_lag_ms(&self, chain_id: ChainId) -> Option<i64> {
-        self.inner
-            .lock()
-            .ok()
-            .and_then(|inner| inner.chain_finality_lag_ms.get(&chain_id).copied())
+    pub fn finality_lag_ms(&self, _chain_id: ChainId) -> Option<i64> {
+        let val = self.chain_finality_lag_ms.load(Ordering::Acquire);
+        if val < 0 { None } else { Some(val) }
     }
 
-    pub fn sync_backoff_ms(&self, chain_id: ChainId) -> Option<i64> {
-        self.inner
-            .lock()
-            .ok()
-            .and_then(|inner| inner.chain_sync_backoff_ms.get(&chain_id).copied())
+    pub fn sync_backoff_ms(&self, _chain_id: ChainId) -> Option<i64> {
+        let val = self.chain_sync_backoff_ms.load(Ordering::Acquire);
+        if val < 0 { None } else { Some(val) }
     }
 }
 
@@ -57,6 +42,7 @@ mod tests {
     #[test]
     fn metrics_record_and_read() {
         let m = Metrics::new();
+        assert_eq!(m.finality_lag_ms(1), None);
         m.record_chain_finality_lag_ms(1, 4200);
         m.record_chain_sync_backoff_ms(1, 2000);
         assert_eq!(m.finality_lag_ms(1), Some(4200));

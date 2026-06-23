@@ -1,4 +1,5 @@
-use tracing;
+use alloc::vec::Vec;
+use core::cmp;
 
 use crate::metrics::Metrics;
 use crate::types::*;
@@ -48,16 +49,9 @@ impl CommitteeState {
         if success {
             self.sync_attempts = 0;
             self.retry_backoff_ms = INITIAL_BACKOFF_MS;
-            tracing::debug!(chain_id = self.chain_id, "committee sync succeeded");
         } else {
             self.sync_attempts += 1;
-            self.retry_backoff_ms = std::cmp::min(self.retry_backoff_ms * 2, MAX_BACKOFF_MS);
-            tracing::warn!(
-                chain_id = self.chain_id,
-                attempt = self.sync_attempts,
-                backoff_ms = self.retry_backoff_ms,
-                "committee sync failed, backing off",
-            );
+            self.retry_backoff_ms = cmp::min(self.retry_backoff_ms * 2, MAX_BACKOFF_MS);
         }
         metrics.record_chain_sync_backoff_ms(self.chain_id, self.retry_backoff_ms as i64);
     }
@@ -76,6 +70,7 @@ impl CommitteeState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
     use crate::metrics::Metrics;
 
     fn make_member(id: u64, weight: u64, drift_ms: i64) -> CommitteeMember {

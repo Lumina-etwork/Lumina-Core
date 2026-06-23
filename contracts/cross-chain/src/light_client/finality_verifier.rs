@@ -1,5 +1,3 @@
-use tracing;
-
 use crate::light_client::committee_sync::CommitteeState;
 use crate::metrics::Metrics;
 use crate::types::*;
@@ -16,10 +14,6 @@ impl FinalityVerifier {
         metrics: &Metrics,
     ) -> bool {
         if !Self::has_supermajority(committee) {
-            tracing::debug!(
-                chain_id = config.chain_id,
-                "skipping finality check \u{2013} no supermajority",
-            );
             return false;
         }
 
@@ -31,13 +25,6 @@ impl FinalityVerifier {
 
         let elapsed = now_ms.saturating_sub(header_timestamp_ms);
         if elapsed >= confirmation_period {
-            tracing::info!(
-                chain_id = config.chain_id,
-                elapsed_ms = elapsed,
-                threshold_ms = confirmation_period,
-                drift = sync_drift_detected,
-                "header finalized",
-            );
             metrics.record_chain_finality_lag_ms(config.chain_id, elapsed as i64);
             true
         } else {
@@ -58,6 +45,7 @@ impl FinalityVerifier {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec::Vec;
     use crate::light_client::committee_sync::CommitteeMember;
     use crate::metrics::Metrics;
     use crate::types::ChainConfig;

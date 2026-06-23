@@ -1,4 +1,4 @@
-use std::cmp;
+use core::cmp;
 
 pub type ChainId = u64;
 pub type BlockTimeMs = u64;
