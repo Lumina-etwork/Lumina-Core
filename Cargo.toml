@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "src/shard-allocator",
     "contracts/vesting_contracts",
     "contracts/grant_contracts",
     "contracts/staking_contract",
@@ -10,9 +11,16 @@ members = [
     "src/pool/shard-migration",
 ]
 
-# core-engine uses std (chrono, rand, etc.) and cannot target wasm32v1-none.
-# Build/test separately: cargo build -p core-engine
-exclude = ["core-engine"]
+default-members = [
+    "contracts/vesting_contracts",
+    "contracts/grant_contracts",
+    "contracts/staking_contract",
+    "contracts/vesting_status_nft",
+    "contracts/vesting_vault",
+    "contracts/deposit_to_yield_adapter",
+    "contracts/insurance_treasury",
+]
+
 resolver = "2"
 
 [workspace.dependencies]
