@@ -1,0 +1,15 @@
+[package]
+name = "lumina-pool"
+version = "0.1.0"
+edition = "2021"
+description = "Congestion-controlled backpressure mechanism for pool replicas"
+
+[dependencies]
+log = "0.4"
+serde = { version = "1.0", features = ["derive"], optional = true }
+
+[dev-dependencies]
+
+[features]
+default = []
+serde = ["dep:serde"]
