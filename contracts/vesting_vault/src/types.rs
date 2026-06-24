@@ -23,7 +23,7 @@ pub struct StreamPause {
     pub notes: String,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct StreamPaused {
     #[topic]
@@ -35,7 +35,7 @@ pub struct StreamPaused {
     pub reason: StreamPauseReason,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct StreamUnpaused {
     #[topic]
@@ -74,7 +74,7 @@ pub struct AddressWhitelistRequest {
     pub effective_at: u64,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct AuthorizedAddressSet {
     #[topic]
@@ -83,7 +83,7 @@ pub struct AuthorizedAddressSet {
     pub effective_at: u64,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct AddressWhitelistRequested {
     #[topic]
@@ -110,7 +110,7 @@ pub struct MilestoneStatus {
     pub last_completed: u32,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct MilestoneCompleted {
     #[topic]
@@ -140,7 +140,7 @@ pub struct TaxConfig {
     pub tax_asset: Option<Address>, // if Some, tax must be paid in this asset (may require swap)
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct TaxWithheld {
     #[topic]
@@ -161,7 +161,7 @@ pub struct TaxWithholdingConfig {
     pub enabled: bool,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct TaxWithholdingConfigured {
     pub tax_treasury_address: Address,
@@ -169,7 +169,7 @@ pub struct TaxWithholdingConfigured {
     pub timestamp: u64,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct TaxWithholdingDisabled {
     pub timestamp: u64,
@@ -183,20 +183,20 @@ pub struct SEP12IdentityOracle {
     pub enabled: bool,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct SEP12OracleConfigured {
     pub oracle_address: Address,
     pub timestamp: u64,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct SEP12KYCDisabled {
     pub timestamp: u64,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct KYCCheckFailed {
     #[topic]
@@ -213,7 +213,7 @@ pub struct TokenMetadata {
     pub decimals: u32,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct TokenMetadataRegistered {
     pub asset_address: Address,
@@ -232,7 +232,7 @@ pub struct VestingGrant {
     pub revocability_expires_at: u64,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct VestingGrantCreated {
     pub vesting_id: u32,
@@ -242,7 +242,7 @@ pub struct VestingGrantCreated {
     pub created_at: u64,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct RevocabilityExpired {
     pub vesting_id: u32,
@@ -259,7 +259,7 @@ pub struct ReputationBonus {
     pub applied_at: u64,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct ReputationBonusApplied {
     #[topic]
@@ -304,7 +304,7 @@ pub struct PrivacyClaimEvent {
     pub is_private: bool,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct CommitmentCreated {
     #[topic]
@@ -315,7 +315,7 @@ pub struct CommitmentCreated {
     pub created_at: u64,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct PrivateClaimExecuted {
     #[topic]
@@ -356,7 +356,7 @@ pub struct PathPaymentSimulation {
     pub reason: String,
     pub estimated_gas_fee: u64,
 }
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct PathPaymentConfigured {
     pub destination_asset: Address,
@@ -365,13 +365,13 @@ pub struct PathPaymentConfigured {
     pub timestamp: u64,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct PathPaymentDisabled {
     pub timestamp: u64,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct PathPaymentClaimExecuted {
     #[topic]
@@ -394,7 +394,7 @@ pub struct LockupConfig {
     pub lockup_token_address: Address,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct LockupConfigured {
     #[topic]
@@ -404,7 +404,7 @@ pub struct LockupConfigured {
     pub timestamp: u64,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct LockupDisabled {
     #[topic]
@@ -412,7 +412,7 @@ pub struct LockupDisabled {
     pub timestamp: u64,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct LockupClaimExecuted {
     #[topic]
@@ -576,7 +576,7 @@ pub struct UnbondingRequest {
     pub unbonding_complete_at: u64,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct LSTConfigured {
     #[topic]
@@ -586,7 +586,7 @@ pub struct LSTConfigured {
     pub timestamp: u64,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct LSTClaimExecuted {
     #[topic]
@@ -599,7 +599,7 @@ pub struct LSTClaimExecuted {
     pub timestamp: u64,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct LSTRewardsCompounded {
     #[topic]
@@ -610,7 +610,7 @@ pub struct LSTRewardsCompounded {
     pub timestamp: u64,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct UnbondingRequested {
     #[topic]
@@ -622,7 +622,7 @@ pub struct UnbondingRequested {
     pub timestamp: u64,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct UnbondingCompleted {
     #[topic]
@@ -636,7 +636,7 @@ pub struct UnbondingCompleted {
 
 // ========== ISSUE #223: Cross-Contract balanceOf Adapter for DAO Voting ==========
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct VotingPowerQueried {
     #[topic]
@@ -661,7 +661,7 @@ pub struct AdminDeadManSwitch {
     pub is_triggered: bool,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct AdminRecoveryAddressSet {
     #[topic]
@@ -669,7 +669,7 @@ pub struct AdminRecoveryAddressSet {
     pub set_at: u64,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct AdminActivityRecorded {
     #[topic]
@@ -677,7 +677,7 @@ pub struct AdminActivityRecorded {
     pub timestamp: u64,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct AdminRecoveryClaimed {
     #[topic]
@@ -703,7 +703,7 @@ pub struct OraclePriceRecord {
     pub frozen_at: u64,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct OraclePriceUpdated {
     pub old_price: i128,
@@ -712,7 +712,7 @@ pub struct OraclePriceUpdated {
     pub timestamp: u64,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct OracleCircuitBreakerTripped {
     pub old_price: i128,
@@ -721,7 +721,7 @@ pub struct OracleCircuitBreakerTripped {
     pub tripped_at: u64,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct OracleCircuitBreakerReset {
     pub reset_by: Address,
@@ -730,7 +730,7 @@ pub struct OracleCircuitBreakerReset {
 
 // ========== ISSUE #231: Self-Destruct Prevention ==========
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct UpgradeBlocked {
     pub total_unvested_balance: i128,
@@ -790,7 +790,7 @@ pub struct ConfidentialClaimProof {
 }
 
 /// Event emitted when a confidential claim is executed
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct ConfidentialClaimExecuted {
     /// Nullifier hash (leaks zero metadata about the claimer)
@@ -804,7 +804,7 @@ pub struct ConfidentialClaimExecuted {
 }
 
 /// Event emitted when a confidential grant is created
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct ConfidentialGrantCreated {
     /// Vesting ID
@@ -818,7 +818,7 @@ pub struct ConfidentialGrantCreated {
 }
 
 /// Event emitted when DAO performs clawback using master viewing key
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct ConfidentialClawbackExecuted {
     /// Vesting ID
@@ -865,7 +865,7 @@ pub struct ExpiredSchedule {
     pub is_force_withdrawn: bool,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct ForceWithdrawalExecuted {
     #[topic]
@@ -879,7 +879,7 @@ pub struct ForceWithdrawalExecuted {
 
 // ========== ISSUE #297: Max-Allocation-Sanity-Check ==========
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct MaxAllocationLimitSet {
     pub max_limit: i128,
@@ -887,7 +887,7 @@ pub struct MaxAllocationLimitSet {
     pub timestamp: u64,
 }
 
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct AllocationLimitExceeded {
     #[topic]
@@ -927,7 +927,7 @@ pub struct MasterSchedule {
 }
 
 /// Event emitted when schedules are successfully consolidated
-#[event]
+#[contractevent]
 #[derive(Clone)]
 pub struct SchedulesConsolidated {
     /// Beneficiary who initiated the merge

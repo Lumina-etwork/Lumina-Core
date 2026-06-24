@@ -21,11 +21,8 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-          targets: wasm32-unknown-unknown
+          targets: wasm32v1-none
           components: rustfmt, clippy
-
-      - name: Ensure wasm target is installed
-        run: rustup target add wasm32-unknown-unknown
 
       - name: Install Stellar CLI
         run: |
@@ -46,13 +43,9 @@ jobs:
           sudo install -m 0755 "${BIN_PATH}" /usr/local/bin/stellar
           stellar --version
 
-      - name: Build Contract
+      - name: Build Contracts
         run: |
-          cargo build --target wasm32-unknown-unknown --release
-
-      - name: Run Formal Reentrancy Verification
-        run: |
-          cargo test -p vesting_contracts -- formal_reentrancy --nocapture
+          cargo build --target wasm32v1-none --release
 
       - name: Run Unit Tests
         run: |

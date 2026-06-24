@@ -1,6 +1,6 @@
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, Env, Address, Vec, Map, String, BytesN, IntoVal, token, panic_with_error};
+use soroban_sdk::{contract, contractimpl, contractevent, vec, Env, Address, Vec, Map, String, BytesN, IntoVal, token, panic_with_error};
 
 mod types;
 mod storage;

@@ -4,6 +4,7 @@ use soroban_sdk::{
     contractimpl,
     contracttype,
     contractevent,
+    vec,
     token,
     Address,
     Env,
@@ -76,7 +77,7 @@ pub enum AdapterError {
     InvalidProtocol,
 }
 
-#[event]
+#[contractevent]
 pub struct ProtocolWhitelisted {
     #[topic]
     pub protocol_address: Address,
@@ -85,13 +86,13 @@ pub struct ProtocolWhitelisted {
     pub risk_rating: u32,
 }
 
-#[event]
+#[contractevent]
 pub struct ProtocolDelisted {
     #[topic]
     pub protocol_address: Address,
 }
 
-#[event]
+#[contractevent]
 pub struct DepositedToYield {
     #[topic]
     pub vault_id: u64,
@@ -103,7 +104,7 @@ pub struct DepositedToYield {
     pub shares_received: i128,
 }
 
-#[event]
+#[contractevent]
 pub struct YieldClaimed {
     #[topic]
     pub vault_id: u64,
@@ -114,7 +115,7 @@ pub struct YieldClaimed {
     pub yield_amount: i128,
 }
 
-#[event]
+#[contractevent]
 pub struct InsuranceFundCapitalized {
     #[topic]
     pub asset: Address,
@@ -122,7 +123,7 @@ pub struct InsuranceFundCapitalized {
     pub total_balance: i128, // But we don't have total_balance here
 }
 
-#[event]
+#[contractevent]
 pub struct PositionWithdrawn {
     #[topic]
     pub vault_id: u64,
@@ -292,7 +293,7 @@ impl DepositToYieldAdapter {
         Self::require_not_paused(&env);
         
         // Get the position
-        let mut positions = Self::get_vault_positions(&env, vault_id);
+        let mut positions = Self::get_vault_positions(env.clone(), vault_id);
         let mut position_index: Option<u32> = None;
         
         for (i, pos) in positions.iter().enumerate() {
@@ -346,11 +347,11 @@ impl DepositToYieldAdapter {
             // Record the deposit in insurance treasury
             let args = vec![
                 &env,
-                env.current_contract_address().into_val(),
-                asset_address.into_val(),
-                insurance_fee.into_val(),
+                env.current_contract_address().into_val(&env),
+                asset_address.into_val(&env),
+                insurance_fee.into_val(&env),
             ];
-            env.invoke_contract(&insurance_treasury, &Symbol::new(&env, "record_deposit"), args);
+            env.invoke_contract::<()>(&insurance_treasury, &Symbol::new(&env, "record_deposit"), args);
         }
         
         // Emit event
@@ -376,7 +377,7 @@ impl DepositToYieldAdapter {
         Self::require_not_paused(&env);
         
         // Get the position
-        let mut positions = Self::get_vault_positions(&env, vault_id);
+        let mut positions = Self::get_vault_positions(env.clone(), vault_id);
         let mut position_index: Option<u32> = None;
         
         for (i, pos) in positions.iter().enumerate() {
@@ -428,11 +429,11 @@ impl DepositToYieldAdapter {
                 // Record the deposit in insurance treasury
                 let args = vec![
                     &env,
-                    env.current_contract_address().into_val(),
-                    asset_address.into_val(),
-                    insurance_fee.into_val(),
+                    env.current_contract_address().into_val(&env),
+                    asset_address.into_val(&env),
+                    insurance_fee.into_val(&env),
                 ];
-                env.invoke_contract(&insurance_treasury, &Symbol::new(&env, "record_deposit"), args);
+                env.invoke_contract::<()>(&insurance_treasury, &Symbol::new(&env, "record_deposit"), args);
             }
         }
         

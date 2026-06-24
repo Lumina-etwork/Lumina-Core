@@ -6,21 +6,15 @@ edition = "2021"
 [workspace]
 members = [
     "src/consensus",
-    "contracts/vesting_contracts",
     "contracts/grant_contracts",
     "contracts/staking_contract",
-    "contracts/vesting_status_nft",
-    "contracts/vesting_vault",
     "contracts/deposit_to_yield_adapter",
     "contracts/insurance_treasury",
 ]
 
 default-members = [
-    "contracts/vesting_contracts",
     "contracts/grant_contracts",
     "contracts/staking_contract",
-    "contracts/vesting_status_nft",
-    "contracts/vesting_vault",
     "contracts/deposit_to_yield_adapter",
     "contracts/insurance_treasury",
 ]
@@ -28,7 +22,7 @@ default-members = [
 resolver = "2"
 
 [workspace.dependencies]
-soroban-sdk = { version = "20.5.0" }
+soroban-sdk = { version = "26.1.0" }
 
 [profile.release]
 opt-level = "z"

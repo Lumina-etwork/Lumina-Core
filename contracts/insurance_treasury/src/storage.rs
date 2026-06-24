@@ -1,6 +1,7 @@
-use soroban_sdk::{Env, Address, Vec, Map};
+use soroban_sdk::{Env, Address, Vec, Map, contracttype};
 use crate::types::*;
 
+#[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
     Admin,
