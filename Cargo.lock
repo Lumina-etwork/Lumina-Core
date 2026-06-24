@@ -257,8 +257,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c673075a2e0e5f4a1dde27ce9dee1ea4558c7ffe648f576438a20ca1d2acc4b0"
 dependencies = [
  "iana-time-zone",
+ "js-sys",
  "num-traits",
  "serde",
+ "wasm-bindgen",
  "windows-link",
 ]
 
@@ -267,6 +269,22 @@ name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
+
+[[package]]
+name = "core-engine"
+version = "0.1.0"
+dependencies = [
+ "arbitrary",
+ "base64 0.21.7",
+ "chrono",
+ "ed25519-dalek",
+ "hex",
+ "rand 0.8.6",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+]
 
 [[package]]
 name = "core-foundation-sys"
@@ -525,6 +543,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "115531babc129696a58c64a4fef0a8bf9e9698629fb97e9e40767d235cfbcd53"
 dependencies = [
  "pkcs8",
+ "serde",
  "signature",
 ]
 
