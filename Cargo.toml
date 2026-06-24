@@ -7,6 +7,7 @@ members = [
     "contracts/vesting_vault",
     "contracts/deposit_to_yield_adapter",
     "contracts/insurance_treasury",
+    "core-engine",
 ]
 resolver = "2"
 
