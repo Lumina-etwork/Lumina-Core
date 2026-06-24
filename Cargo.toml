@@ -23,7 +23,7 @@ default-members = [
 resolver = "2"
 
 [workspace.dependencies]
-soroban-sdk = { version = "22" }
+soroban-sdk = { version = "25.3.1" }
 
 [profile.release]
 opt-level = "z"
