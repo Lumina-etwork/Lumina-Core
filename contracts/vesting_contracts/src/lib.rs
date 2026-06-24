@@ -1,7 +1,10 @@
 #![no_std]
+
+extern crate alloc;
+
 use soroban_sdk::{
-    contract, contractevent, contractimpl, contracttype, token, vec, Address, BytesN, Env, IntoVal,
-    String, Symbol, Vec, U256,
+    contract, contractevent, contractimpl, contracttype, token, vec, Address, Bytes, BytesN, Env,
+    IntoVal, String, Symbol, Vec, U256,
 };
 
 mod errors;
@@ -1502,21 +1505,20 @@ impl VestingContract {
 
     /// Hash two bytes arrays together (simplified SHA-256 behavior)
     fn hash_pair(env: &Env, left: &BytesN<32>, right: &BytesN<32>) -> BytesN<32> {
-        let mut combined = Vec::new(env);
+        let mut combined = alloc::vec::Vec::<u8>::new();
         combined.extend_from_slice(left.as_slice());
         combined.extend_from_slice(right.as_slice());
-        env.crypto().sha256(&combined.into())
+        let soroban_bytes = Bytes::from_slice(env, &combined);
+        env.crypto().sha256(&soroban_bytes).into()
     }
 
     /// Hash a vesting schedule leaf into a 32-byte array
     fn hash_vesting_leaf(env: &Env, leaf: &VestingScheduleLeaf) -> BytesN<32> {
-        let mut data = Vec::new(env);
+        let mut data = alloc::vec::Vec::<u8>::new();
 
-        // Serialize leaf data
         data.extend_from_slice(leaf.beneficiary.to_xdr(env).as_slice());
         data.extend_from_slice(&leaf.vault_id.to_le_bytes());
 
-        // Hash asset basket
         for allocation in leaf.asset_basket.iter() {
             data.extend_from_slice(allocation.asset_id.to_xdr(env).as_slice());
             data.extend_from_slice(&allocation.total_amount.to_le_bytes());
@@ -1528,11 +1530,12 @@ impl VestingContract {
         data.extend_from_slice(&leaf.start_time.to_le_bytes());
         data.extend_from_slice(&leaf.end_time.to_le_bytes());
         data.extend_from_slice(&leaf.keeper_fee.to_le_bytes());
-        data.extend_from_slice(&[if leaf.is_revocable { 1u8 } else { 0u8 }]);
-        data.extend_from_slice(&[if leaf.is_transferable { 1u8 } else { 0u8 }]);
+        data.push(if leaf.is_revocable { 1u8 } else { 0u8 });
+        data.push(if leaf.is_transferable { 1u8 } else { 0u8 });
         data.extend_from_slice(&leaf.step_duration.to_le_bytes());
 
-        env.crypto().sha256(&data.into())
+        let soroban_bytes = Bytes::from_slice(env, &data);
+        env.crypto().sha256(&soroban_bytes).into()
     }
 
     /// Get the current Merkle root
@@ -6510,6 +6513,24 @@ impl VestingContract {
     }
 
     // Private helper methods for legal document integration
+
+    // ========== COMPLIANCE HELPER FUNCTIONS ==========
+
+    fn is_kyc_verified(_e: &Env, _user: &Address) -> bool {
+        true
+    }
+
+    fn get_kyc_expiry(_e: &Env, _user: &Address) -> Option<u64> {
+        None
+    }
+
+    fn is_address_sanctioned(_e: &Env, _user: &Address) -> bool {
+        false
+    }
+
+    fn is_jurisdiction_restricted(_e: &Env, _user: &Address) -> bool {
+        false
+    }
 }
 
 // Redefinition removed

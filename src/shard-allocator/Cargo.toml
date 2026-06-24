@@ -1,0 +1,5 @@
+[package]
+name = "lumina-shard-allocator"
+version = "0.1.0"
+edition = "2021"
+description = "Slab allocator with buddy-tree free-list and background defragmentation for Lumina-Core"
