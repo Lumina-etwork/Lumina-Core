@@ -1,1 +1,1 @@
-pub mod quic;
+pub mod gossip;
