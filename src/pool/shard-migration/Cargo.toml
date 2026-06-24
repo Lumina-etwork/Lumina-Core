@@ -1,0 +1,10 @@
+[package]
+name = "shard-migration"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# no external deps
+
+[dev-dependencies]
+# For tests
