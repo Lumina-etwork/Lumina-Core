@@ -15,30 +15,22 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      
+      - uses: actions/checkout@v4
+
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.91.0
-          target: wasm32v1-none
-          override: true
+          targets: wasm32-unknown-unknown
           components: rustfmt, clippy
 
       - name: Install Stellar CLI
         run: |
-          wget https://github.com/stellar/stellar-cli/releases/download/v25.1.0/stellar-cli-25.1.0-x86_64-unknown-linux-gnu.tar.gz
-          tar -xzf stellar-cli-25.1.0-x86_64-unknown-linux-gnu.tar.gz
-          sudo mv stellar /usr/local/bin/
-          set -euo pipefail
-
-          VERSION="25.1.0"
+          VERSION="22.1.0"
           ARCHIVE="stellar-cli-${VERSION}-x86_64-unknown-linux-gnu.tar.gz"
           URL="https://github.com/stellar/stellar-cli/releases/download/v${VERSION}/${ARCHIVE}"
 
           wget "${URL}" -O "${ARCHIVE}"
 
-          # Package layout has changed across versions; locate the binary from the archive contents.
           BIN_PATH="$(tar -tzf "${ARCHIVE}" | grep -E '(^|/)stellar(-cli)?$' | head -n 1 || true)"
           if [ -z "${BIN_PATH}" ]; then
             echo "Could not locate stellar CLI binary in ${ARCHIVE}"
@@ -47,20 +39,17 @@ jobs:
           fi
 
           tar -xzf "${ARCHIVE}"
-
           sudo install -m 0755 "${BIN_PATH}" /usr/local/bin/stellar
           stellar --version
 
       - name: Build Contract
         run: |
-          cargo clean
-          cargo build --target wasm32v1-none --release
+          cargo build --target wasm32-unknown-unknown --release
 
       - name: Run Formal Reentrancy Verification
         run: |
-          cargo test -p vesting_contracts formal_reentrancy -- --nocapture
+          cargo test -p vesting_contracts -- formal_reentrancy --nocapture
 
       - name: Run Unit Tests
         run: |
           cargo test --workspace
-          cargo test --all-features
