@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "src/shard-allocator",
+    "src/consensus",
     "contracts/vesting_contracts",
     "contracts/grant_contracts",
     "contracts/staking_contract",
@@ -8,7 +8,6 @@ members = [
     "contracts/vesting_vault",
     "contracts/deposit_to_yield_adapter",
     "contracts/insurance_treasury",
-    "contracts/cross-chain",
 ]
 
 default-members = [
