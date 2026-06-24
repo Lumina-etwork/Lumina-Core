@@ -7,8 +7,11 @@ members = [
     "contracts/vesting_vault",
     "contracts/deposit_to_yield_adapter",
     "contracts/insurance_treasury",
-    "core-engine",
 ]
+
+# core-engine uses std (chrono, rand, etc.) and cannot target wasm32v1-none.
+# Build/test separately: cargo build -p core-engine
+exclude = ["core-engine"]
 resolver = "2"
 
 [workspace.dependencies]
