@@ -1,6 +1,8 @@
 pub mod allocator;
+pub mod backpressure;
 pub mod defrag;
 pub mod metrics;
+pub mod pool;
 
 /// Total slab size per tenant in bytes.
 pub const SLAB_SIZE: usize = 65_536; // 64 KB
@@ -48,12 +50,3 @@ pub enum ShardAllocEvent {
     },
 }
 
-/// Fragmentation ratio metric.
-#[derive(Clone, Debug)]
-pub struct FragmentationGauge(pub f64);
-
-impl FragmentationGauge {
-    pub fn ratio(&self) -> f64 {
-        self.0
-    }
-}
