@@ -5,7 +5,9 @@
 ///   - New key activates 2 epochs after the rotation is committed
 ///     (activation_epoch = rotation_epoch + 2).
 ///   - Old key is valid through activation_epoch + 2 (3-epoch grace window).
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 /// The grace period: old key remains valid for this many epochs after a new
 /// key's activation epoch.
@@ -47,7 +49,7 @@ pub enum RotationError {
 #[derive(Default)]
 pub struct RotationOrchestrator {
     /// Last epoch a rotation was committed per node.
-    last_rotation_epoch: HashMap<String, u64>,
+    last_rotation_epoch: BTreeMap<String, u64>,
 }
 
 impl RotationOrchestrator {
@@ -79,6 +81,8 @@ impl RotationOrchestrator {
 
 #[cfg(test)]
 mod tests {
+    extern crate std;
+    use std::vec;
     use super::*;
 
     #[test]

@@ -4,9 +4,9 @@
 /// `keys_valid_at` returns every cached version whose validity window
 /// covers the requested epoch — the verifier uses this to retry with
 /// old keys during the grace period.
-use std::collections::HashMap;
-use crate::key_rotation::KeyEpoch;
-use crate::ed25519::store::KeyVersionStore;
+use alloc::vec::Vec;
+use crate::identity::key_rotation::KeyEpoch;
+use crate::identity::ed25519::store::KeyVersionStore;
 
 pub struct RegistryClient {
     cache: KeyVersionStore,
@@ -44,6 +44,8 @@ impl RegistryClient {
 
 #[cfg(test)]
 mod tests {
+    extern crate std;
+    use std::vec;
     use super::*;
 
     #[test]

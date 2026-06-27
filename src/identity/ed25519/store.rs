@@ -2,15 +2,17 @@
 ///
 /// Retains the last `MAX_VERSIONS` (3) KeyEpoch records per node in
 /// ascending epoch order. Oldest version is evicted when the cap is exceeded.
-use std::collections::HashMap;
-use crate::key_rotation::KeyEpoch;
+use alloc::collections::BTreeMap;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+use crate::identity::key_rotation::KeyEpoch;
 
 pub const MAX_VERSIONS: usize = 3;
 
 #[derive(Default)]
 pub struct KeyVersionStore {
     /// node_id → versions sorted by activation_epoch ascending.
-    versions: HashMap<String, Vec<KeyEpoch>>,
+    versions: BTreeMap<String, Vec<KeyEpoch>>,
 }
 
 impl KeyVersionStore {
@@ -58,6 +60,8 @@ impl KeyVersionStore {
 
 #[cfg(test)]
 mod tests {
+    extern crate std;
+    use std::vec;
     use super::*;
 
     #[test]
