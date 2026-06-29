@@ -2,7 +2,7 @@
 //! Cache for tracking used nonces per node and epoch, with expiry for old epochs.
 
 use alloc::collections::BTreeMap;
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 /// Tracks used nonces for each (node_id, epoch_id) pair.

@@ -2,7 +2,7 @@
 //! Proof-of-connectivity protocol implementation with epoch scoping to prevent replay attacks.
 
 use alloc::collections::BTreeMap;
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use crate::attestation::types::{Challenge, ChallengeResponse, PocError};
 use crate::attestation::nonce_generator::NonceGenerator;
