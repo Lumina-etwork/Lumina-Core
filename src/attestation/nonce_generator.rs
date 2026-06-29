@@ -2,8 +2,6 @@
 //! Nonce generator using BLAKE2b hashing for epoch-scoped challenges.
 
 use blake2::{Blake2b512, Digest};
-use alloc::vec::Vec;
-use alloc::string::String;
 
 /// Generates epoch-scoped nonces for proof-of-connectivity challenges.
 pub struct NonceGenerator {

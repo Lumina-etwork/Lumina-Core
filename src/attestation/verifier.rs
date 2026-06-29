@@ -12,8 +12,8 @@
 /// This file lives in `lumina-attestation`. Add to its Cargo.toml:
 ///   lumina-identity = { path = "../identity" }
 /// and update the use paths below accordingly.
-use std::sync::atomic::{AtomicU64, Ordering};
-use lumina_identity::registry_client::RegistryClient;
+use core::sync::atomic::{AtomicU64, Ordering};
+use crate::identity::registry_client::RegistryClient;
 
 /// Pluggable signature verifier — production uses Ed25519; tests use a stub.
 pub trait SignatureVerifier: Send + Sync {
@@ -83,8 +83,8 @@ impl<V: SignatureVerifier> AttestationVerifier<V> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lumina_identity::key_rotation::{KeyEpoch, RotationOrchestrator};
-    use lumina_identity::registry_client::RegistryClient;
+    use crate::identity::key_rotation::{KeyEpoch, RotationOrchestrator};
+    use crate::identity::registry_client::RegistryClient;
 
     /// Stub verifier: signature is valid iff it equals the public key bytes.
     struct StubVerifier;

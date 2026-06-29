@@ -3,10 +3,10 @@
 
 use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
-use alloc::vec::Vec;
 use crate::attestation::types::{Challenge, ChallengeResponse, PocError};
 use crate::attestation::nonce_generator::NonceGenerator;
 use crate::attestation::nonce_cache::NonceCache;
+use crate::attestation::verifier::SignatureVerifier;
 
 /// Configuration for the proof-of-connectivity protocol.
 pub struct PocConfig {
@@ -150,11 +150,6 @@ impl<V: SignatureVerifier> ProofOfConnectivity<V> {
             state.blacklisted_until_epoch = current_epoch + self.config.blacklist_duration_epochs;
         }
     }
-}
-
-/// Pluggable signature verifier trait (matches verifier.rs pattern).
-pub trait SignatureVerifier: Send + Sync {
-    fn verify(&self, public_key: &[u8], message: &[u8], signature: &[u8]) -> bool;
 }
 
 #[cfg(test)]

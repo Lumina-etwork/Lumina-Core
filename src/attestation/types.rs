@@ -1,6 +1,7 @@
 
 //! Core types for proof-of-connectivity protocol.
 
+use alloc::string::String;
 use alloc::vec::Vec;
 
 /// A challenge issued to a node to prove connectivity.
