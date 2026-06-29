@@ -3,6 +3,13 @@ name = "lumina_core"
 version = "0.1.0"
 edition = "2021"
 
+[dependencies]
+blake2 = { workspace = true }
+alloc = { version = "1.0.0", package = "rustc-std-workspace-alloc", optional = true }
+
+[dev-dependencies]
+proptest = "1.0"
+
 [workspace]
 members = [
     "src/consensus",
@@ -23,6 +30,7 @@ resolver = "2"
 
 [workspace.dependencies]
 soroban-sdk = { version = "26.1.0" }
+blake2 = "0.10"
 
 [profile.release]
 opt-level = "z"
