@@ -1,7 +1,7 @@
-use std::collections::HashMap;
+use chrono::Utc;
 use ed25519_dalek::VerifyingKey;
 use serde::{Deserialize, Serialize};
-use chrono::Utc;
+use std::collections::HashMap;
 
 use super::endpoint_cache::EndpointCache;
 
@@ -28,11 +28,7 @@ impl RelayRegistry {
     }
 
     /// Register a relay. Called by admin or on successful relay join.
-    pub fn register_relay(
-        &mut self,
-        relay_id: &str,
-        public_key: &VerifyingKey,
-    ) -> RelayInfo {
+    pub fn register_relay(&mut self, relay_id: &str, public_key: &VerifyingKey) -> RelayInfo {
         let info = RelayInfo {
             relay_id: relay_id.to_string(),
             public_key_bytes: public_key.to_bytes().to_vec(),
@@ -52,10 +48,7 @@ impl RelayRegistry {
 
     /// Check if a relay is registered and active.
     pub fn is_active(&self, relay_id: &str) -> bool {
-        self.relays
-            .get(relay_id)
-            .map(|i| i.active)
-            .unwrap_or(false)
+        self.relays.get(relay_id).map(|i| i.active).unwrap_or(false)
     }
 
     /// Get relay info.

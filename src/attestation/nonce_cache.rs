@@ -1,4 +1,3 @@
-
 //! Cache for tracking used nonces per node and epoch, with expiry for old epochs.
 
 use alloc::collections::BTreeMap;
@@ -30,7 +29,13 @@ impl NonceCache {
     ///
     /// # Returns
     /// true if nonce is already used, false otherwise
-    pub fn is_used(&mut self, node_id: &str, epoch_id: u32, nonce: &[u8; 32], current_epoch: u32) -> bool {
+    pub fn is_used(
+        &mut self,
+        node_id: &str,
+        epoch_id: u32,
+        nonce: &[u8; 32],
+        current_epoch: u32,
+    ) -> bool {
         self.cleanup(current_epoch);
 
         if let Some(node_entries) = self.entries.get(node_id) {
@@ -51,9 +56,12 @@ impl NonceCache {
     pub fn mark_used(&mut self, node_id: &str, epoch_id: u32, nonce: [u8; 32], current_epoch: u32) {
         self.cleanup(current_epoch);
 
-        let node_entries = self.entries.entry(node_id.to_string()).or_insert_with(BTreeMap::new);
+        let node_entries = self
+            .entries
+            .entry(node_id.to_string())
+            .or_insert_with(BTreeMap::new);
         let epoch_nonces = node_entries.entry(epoch_id).or_insert_with(Vec::new);
-        
+
         if !epoch_nonces.contains(&nonce) {
             epoch_nonces.push(nonce);
         }
@@ -61,7 +69,11 @@ impl NonceCache {
 
     /// Remove all entries for epochs older than `current_epoch - 2`.
     fn cleanup(&mut self, current_epoch: u32) {
-        let min_epoch = if current_epoch >= 2 { current_epoch - 2 } else { 0 };
+        let min_epoch = if current_epoch >= 2 {
+            current_epoch - 2
+        } else {
+            0
+        };
 
         self.entries.retain(|_, node_entries| {
             node_entries.retain(|&epoch, _| epoch >= min_epoch);
@@ -105,7 +117,7 @@ mod tests {
         cache.cleanup(3);
 
         assert!(!cache.is_used("node-1", 0, &nonce1, 3)); // Should be cleaned up
-        assert!(cache.is_used("node-1", 1, &nonce2, 3));  // Still valid
-        assert!(cache.is_used("node-1", 2, &nonce3, 3));  // Still valid
+        assert!(cache.is_used("node-1", 1, &nonce2, 3)); // Still valid
+        assert!(cache.is_used("node-1", 2, &nonce3, 3)); // Still valid
     }
 }

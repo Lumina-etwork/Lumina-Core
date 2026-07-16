@@ -1,23 +1,31 @@
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, contractevent, vec, Env, Address, Vec, Map, String, BytesN, IntoVal, token, panic_with_error};
+use soroban_sdk::{
+    contract, contractevent, contractimpl, panic_with_error, token, vec, Address, BytesN, Env,
+    IntoVal, Map, String, Vec,
+};
 
-mod types;
-mod storage;
 mod errors;
+mod storage;
+mod types;
 
-pub use types::*;
 use errors::Error;
 use storage::*;
+pub use types::*;
 
 #[contract]
 pub struct InsuranceTreasury;
 
 #[contractimpl]
 impl InsuranceTreasury {
-
     /// Initialize the insurance treasury with security council
-    pub fn initialize(e: Env, admin: Address, security_council: Vec<Address>, usdc: Address, xlm: Address) {
+    pub fn initialize(
+        e: Env,
+        admin: Address,
+        security_council: Vec<Address>,
+        usdc: Address,
+        xlm: Address,
+    ) {
         admin.require_auth();
 
         if security_council.len() != 5 {
@@ -55,7 +63,8 @@ impl InsuranceTreasury {
             asset,
             amount,
             total_balance: balance,
-        }.publish(&e);
+        }
+        .publish(&e);
     }
 
     /// Authorize a yield adapter to deposit (called by admin)
@@ -70,7 +79,13 @@ impl InsuranceTreasury {
     }
 
     /// Request a bailout (starts timelock)
-    pub fn request_bailout(e: Env, requester: Address, beneficiary: Address, asset: Address, amount: i128) {
+    pub fn request_bailout(
+        e: Env,
+        requester: Address,
+        beneficiary: Address,
+        asset: Address,
+        amount: i128,
+    ) {
         // Only security council can request
         let council = get_security_council(&e);
         if !council.contains(&requester) {
@@ -105,7 +120,8 @@ impl InsuranceTreasury {
             asset,
             amount,
             requested_at: request.requested_at,
-        }.publish(&e);
+        }
+        .publish(&e);
     }
 
     /// Sign a bailout request
@@ -152,7 +168,11 @@ impl InsuranceTreasury {
 
         // Execute
         let token_client = token::Client::new(&e, &request.asset);
-        token_client.transfer(&e.current_contract_address(), &request.beneficiary, &request.amount);
+        token_client.transfer(
+            &e.current_contract_address(),
+            &request.beneficiary,
+            &request.amount,
+        );
 
         // Update balance
         let mut balance = get_balance(&e, &request.asset);
@@ -169,7 +189,8 @@ impl InsuranceTreasury {
             asset: request.asset,
             amount: request.amount,
             executed_at: current_time,
-        }.publish(&e);
+        }
+        .publish(&e);
     }
 
     /// Handle partial clawback (edge case)

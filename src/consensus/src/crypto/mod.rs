@@ -54,10 +54,7 @@ fn verify_aggregate(_commitment: &[u8; 32], signature: &[u8]) -> bool {
 }
 
 /// Create a mock multi-signature for testing.
-pub fn create_mock_signature(
-    message: &[u8],
-    pubkeys: &BTreeSet<Vec<u8>>,
-) -> MultiSignature {
+pub fn create_mock_signature(message: &[u8], pubkeys: &BTreeSet<Vec<u8>>) -> MultiSignature {
     let count = pubkeys.len();
     let commitment = compute_commitment(message, pubkeys);
     let mut signature = commitment.to_vec();

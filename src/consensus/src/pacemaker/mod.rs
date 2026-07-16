@@ -95,9 +95,7 @@ impl TimeoutController {
 
     /// Check if the current round has timed out.
     pub fn is_timed_out(&self, elapsed: Duration) -> bool {
-        self.deadline
-            .map(|d| elapsed >= d)
-            .unwrap_or(false)
+        self.deadline.map(|d| elapsed >= d).unwrap_or(false)
     }
 
     pub fn current_view(&self) -> u64 {

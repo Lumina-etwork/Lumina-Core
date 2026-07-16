@@ -85,12 +85,12 @@ impl GrantContract {
         recipient.require_auth();
 
         // ========== COMPLIANCE CHECKS ==========
-        
+
         // KYC Verification Check
         if !Self::is_kyc_verified(&env, &recipient) {
             return Err(Error::KycNotCompleted);
         }
-        
+
         // KYC Expiration Check
         if let Some(kyc_expiry) = Self::get_kyc_expiry(&env, &recipient) {
             let current_time = env.ledger().timestamp();
@@ -98,47 +98,47 @@ impl GrantContract {
                 return Err(Error::KycExpired);
             }
         }
-        
+
         // Sanctions Check
         if Self::is_address_sanctioned(&env, &recipient) {
             return Err(Error::AddressSanctioned);
         }
-        
+
         // Jurisdiction Restriction Check
         if Self::is_jurisdiction_restricted(&env, &recipient) {
             return Err(Error::JurisdictionRestricted);
         }
-        
+
         // Legal Signature Verification
         if !Self::has_valid_legal_signature(&env, &recipient) {
             return Err(Error::LegalSignatureMissing);
         }
-        
+
         // Document Verification Check
         if !Self::are_documents_verified(&env, &recipient) {
             return Err(Error::DocumentVerificationFailed);
         }
-        
+
         // Tax Compliance Check
         if !Self::is_tax_compliant(&env, &recipient) {
             return Err(Error::TaxComplianceFailed);
         }
-        
+
         // Whitelist Approval Check
         if !Self::is_whitelist_approved(&env, &recipient) {
             return Err(Error::WhitelistNotApproved);
         }
-        
+
         // Blacklist Violation Check
         if Self::is_on_blacklist(&env, &recipient) {
             return Err(Error::BlacklistViolation);
         }
-        
+
         // Geofencing Restriction Check
         if Self::is_geofencing_restricted(&env, &recipient) {
             return Err(Error::GeofencingRestriction);
         }
-        
+
         // Identity Verification Expiration Check
         if let Some(identity_expiry) = Self::get_identity_expiry(&env, &recipient) {
             let current_time = env.ledger().timestamp();
@@ -146,12 +146,12 @@ impl GrantContract {
                 return Err(Error::IdentityVerificationExpired);
             }
         }
-        
+
         // Politically Exposed Person Check
         if Self::is_politically_exposed_person(&env, &recipient) {
             return Err(Error::PoliticallyExposedPerson);
         }
-        
+
         // Sanctions List Hit Check
         if Self::is_on_sanctions_list(&env, &recipient) {
             return Err(Error::SanctionsListHit);
@@ -195,7 +195,7 @@ impl GrantContract {
     }
 
     // ========== COMPLIANCE HELPER FUNCTIONS ==========
-    
+
     /// Check if user has completed KYC verification
     fn is_kyc_verified(_e: &Env, _user: &Address) -> bool {
         // TODO: Implement actual KYC verification check
@@ -203,7 +203,7 @@ impl GrantContract {
         // For now, return true as placeholder
         true
     }
-    
+
     /// Get KYC expiration timestamp for user
     fn get_kyc_expiry(_e: &Env, _user: &Address) -> Option<u64> {
         // TODO: Implement actual KYC expiry check
@@ -211,7 +211,7 @@ impl GrantContract {
         // For now, return None (no expiry)
         None
     }
-    
+
     /// Check if address is on sanctions list
     fn is_address_sanctioned(_e: &Env, _user: &Address) -> bool {
         // TODO: Implement actual sanctions check
@@ -219,7 +219,7 @@ impl GrantContract {
         // For now, return false as placeholder
         false
     }
-    
+
     /// Check if user's jurisdiction is restricted
     fn is_jurisdiction_restricted(_e: &Env, _user: &Address) -> bool {
         // TODO: Implement actual jurisdiction check
@@ -227,7 +227,7 @@ impl GrantContract {
         // For now, return false as placeholder
         false
     }
-    
+
     /// Check if user has valid legal signature
     fn has_valid_legal_signature(_e: &Env, _user: &Address) -> bool {
         // TODO: Implement actual legal signature verification
@@ -235,7 +235,7 @@ impl GrantContract {
         // For now, return true as placeholder
         true
     }
-    
+
     /// Check if user's documents are verified
     fn are_documents_verified(_e: &Env, _user: &Address) -> bool {
         // TODO: Implement actual document verification check
@@ -243,7 +243,7 @@ impl GrantContract {
         // For now, return true as placeholder
         true
     }
-    
+
     /// Check if user is tax compliant
     fn is_tax_compliant(_e: &Env, _user: &Address) -> bool {
         // TODO: Implement actual tax compliance check
@@ -251,7 +251,7 @@ impl GrantContract {
         // For now, return true as placeholder
         true
     }
-    
+
     /// Check if user is approved on whitelist
     fn is_whitelist_approved(_e: &Env, _user: &Address) -> bool {
         // TODO: Implement actual whitelist approval check
@@ -259,7 +259,7 @@ impl GrantContract {
         // For now, return true as placeholder
         true
     }
-    
+
     /// Check if user is on blacklist
     fn is_on_blacklist(_e: &Env, _user: &Address) -> bool {
         // TODO: Implement actual blacklist check
@@ -267,7 +267,7 @@ impl GrantContract {
         // For now, return false as placeholder
         false
     }
-    
+
     /// Check if user is subject to geofencing restrictions
     fn is_geofencing_restricted(_e: &Env, _user: &Address) -> bool {
         // TODO: Implement actual geofencing check
@@ -275,7 +275,7 @@ impl GrantContract {
         // For now, return false as placeholder
         false
     }
-    
+
     /// Get identity verification expiration for user
     fn get_identity_expiry(_e: &Env, _user: &Address) -> Option<u64> {
         // TODO: Implement actual identity expiry check
@@ -283,7 +283,7 @@ impl GrantContract {
         // For now, return None (no expiry)
         None
     }
-    
+
     /// Check if user is a politically exposed person
     fn is_politically_exposed_person(_e: &Env, _user: &Address) -> bool {
         // TODO: Implement actual PEP check
@@ -291,7 +291,7 @@ impl GrantContract {
         // For now, return false as placeholder
         false
     }
-    
+
     /// Check if user appears on sanctions lists
     fn is_on_sanctions_list(_e: &Env, _user: &Address) -> bool {
         // TODO: Implement actual sanctions list screening

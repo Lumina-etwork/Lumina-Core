@@ -1,3 +1,4 @@
+use crate::identity::key_rotation::KeyEpoch;
 /// Per-node Ed25519 key version store.
 ///
 /// Retains the last `MAX_VERSIONS` (3) KeyEpoch records per node in
@@ -5,7 +6,6 @@
 use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use crate::identity::key_rotation::KeyEpoch;
 
 pub const MAX_VERSIONS: usize = 3;
 
@@ -21,7 +21,10 @@ impl KeyVersionStore {
     pub fn insert(&mut self, node_id: &str, key: KeyEpoch) {
         let versions = self.versions.entry(node_id.to_string()).or_default();
         // Keep sorted by activation_epoch; avoid duplicates.
-        if let Some(pos) = versions.iter().position(|k| k.activation_epoch == key.activation_epoch) {
+        if let Some(pos) = versions
+            .iter()
+            .position(|k| k.activation_epoch == key.activation_epoch)
+        {
             versions[pos] = key;
         } else {
             versions.push(key);
@@ -36,7 +39,10 @@ impl KeyVersionStore {
     /// Called when a rotation commits, to cap the old key's validity window.
     pub fn set_expiry(&mut self, node_id: &str, activation_epoch: u64, expiry_epoch: u64) {
         if let Some(versions) = self.versions.get_mut(node_id) {
-            if let Some(k) = versions.iter_mut().find(|k| k.activation_epoch == activation_epoch) {
+            if let Some(k) = versions
+                .iter_mut()
+                .find(|k| k.activation_epoch == activation_epoch)
+            {
                 k.expiry_epoch = expiry_epoch;
             }
         }
@@ -52,17 +58,15 @@ impl KeyVersionStore {
 
     /// Return the most recently activated key regardless of epoch validity.
     pub fn current(&self, node_id: &str) -> Option<&KeyEpoch> {
-        self.versions
-            .get(node_id)
-            .and_then(|v| v.last())
+        self.versions.get(node_id).and_then(|v| v.last())
     }
 }
 
 #[cfg(test)]
 mod tests {
     extern crate std;
-    use std::vec;
     use super::*;
+    use std::vec;
 
     #[test]
     fn retains_at_most_three_versions() {

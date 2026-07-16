@@ -1,4 +1,3 @@
-
 //! Nonce generator using BLAKE2b hashing for epoch-scoped challenges.
 
 use blake2::{Blake2b512, Digest};
@@ -28,7 +27,7 @@ impl NonceGenerator {
         hasher.update(epoch_id.to_be_bytes());
         hasher.update(&self.seed);
         hasher.update(node_id.as_bytes());
-        
+
         let hash = hasher.finalize();
         let mut nonce = [0u8; 32];
         nonce.copy_from_slice(&hash[0..32]);

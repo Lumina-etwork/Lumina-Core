@@ -1,3 +1,5 @@
+use crate::identity::ed25519::store::KeyVersionStore;
+use crate::identity::key_rotation::KeyEpoch;
 /// Distributed registry client with a versioned key cache.
 ///
 /// Caches up to `MAX_VERSIONS` (3) KeyEpoch records per node.
@@ -5,8 +7,6 @@
 /// covers the requested epoch — the verifier uses this to retry with
 /// old keys during the grace period.
 use alloc::vec::Vec;
-use crate::identity::key_rotation::KeyEpoch;
-use crate::identity::ed25519::store::KeyVersionStore;
 
 pub struct RegistryClient {
     cache: KeyVersionStore,
@@ -14,7 +14,9 @@ pub struct RegistryClient {
 
 impl RegistryClient {
     pub fn new() -> Self {
-        Self { cache: KeyVersionStore::default() }
+        Self {
+            cache: KeyVersionStore::default(),
+        }
     }
 
     /// Publish a newly activated key (or a key with its expiry capped after
@@ -25,7 +27,8 @@ impl RegistryClient {
 
     /// Cap the expiry of an existing key version (called on rotation commit).
     pub fn cap_expiry(&mut self, node_id: &str, activation_epoch: u64, expiry_epoch: u64) {
-        self.cache.set_expiry(node_id, activation_epoch, expiry_epoch);
+        self.cache
+            .set_expiry(node_id, activation_epoch, expiry_epoch);
     }
 
     /// Return all cached key versions valid at `epoch`.
@@ -45,8 +48,8 @@ impl RegistryClient {
 #[cfg(test)]
 mod tests {
     extern crate std;
-    use std::vec;
     use super::*;
+    use std::vec;
 
     #[test]
     fn grace_period_lookup_returns_both_keys() {

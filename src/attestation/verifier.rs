@@ -1,3 +1,4 @@
+use crate::identity::registry_client::RegistryClient;
 /// Attestation verifier with grace-period key fallback.
 ///
 /// Verification strategy:
@@ -13,7 +14,6 @@
 ///   lumina-identity = { path = "../identity" }
 /// and update the use paths below accordingly.
 use core::sync::atomic::{AtomicU64, Ordering};
-use crate::identity::registry_client::RegistryClient;
 
 /// Pluggable signature verifier — production uses Ed25519; tests use a stub.
 pub trait SignatureVerifier: Send + Sync {
@@ -67,7 +67,8 @@ impl<V: SignatureVerifier> AttestationVerifier<V> {
         for key in &candidates {
             if self.verifier.verify(&key.public_key, message, signature) {
                 if key.activation_epoch < newest_activation {
-                    self.graceful_rotation_success.fetch_add(1, Ordering::Relaxed);
+                    self.graceful_rotation_success
+                        .fetch_add(1, Ordering::Relaxed);
                 }
                 return Ok(());
             }
@@ -193,7 +194,10 @@ mod tests {
         // Within grace window (epoch = new_key.activation_epoch + 1 = 6)
         let grace_epoch = new_key.activation_epoch + 1;
         assert!(grace_epoch < old_expiry, "test epoch must be within grace");
-        assert_eq!(av.verify("node-1", b"data", &old_key_bytes, grace_epoch), Ok(()));
+        assert_eq!(
+            av.verify("node-1", b"data", &old_key_bytes, grace_epoch),
+            Ok(())
+        );
         assert_eq!(av.graceful_rotation_success(), 1);
 
         // After grace (epoch = old_expiry)

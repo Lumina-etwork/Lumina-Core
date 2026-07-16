@@ -1,12 +1,11 @@
-
 //! Proof-of-connectivity protocol implementation with epoch scoping to prevent replay attacks.
 
+use crate::attestation::nonce_cache::NonceCache;
+use crate::attestation::nonce_generator::NonceGenerator;
+use crate::attestation::types::{Challenge, ChallengeResponse, PocError};
+use crate::attestation::verifier::SignatureVerifier;
 use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
-use crate::attestation::types::{Challenge, ChallengeResponse, PocError};
-use crate::attestation::nonce_generator::NonceGenerator;
-use crate::attestation::nonce_cache::NonceCache;
-use crate::attestation::verifier::SignatureVerifier;
 
 /// Configuration for the proof-of-connectivity protocol.
 pub struct PocConfig {
@@ -76,7 +75,12 @@ impl<V: SignatureVerifier> ProofOfConnectivity<V> {
     ///
     /// # Returns
     /// A new Challenge instance
-    pub fn generate_challenge(&mut self, node_id: &str, current_epoch: u32, current_time: u64) -> Result<Challenge, PocError> {
+    pub fn generate_challenge(
+        &mut self,
+        node_id: &str,
+        current_epoch: u32,
+        current_time: u64,
+    ) -> Result<Challenge, PocError> {
         let state = self.node_states.entry(node_id.to_string()).or_default();
         if current_epoch < state.blacklisted_until_epoch {
             return Err(PocError::NodeBlacklisted);
@@ -101,7 +105,13 @@ impl<V: SignatureVerifier> ProofOfConnectivity<V> {
     ///
     /// # Returns
     /// Ok(()) if verification succeeds, Err(PocError) otherwise
-    pub fn verify_response(&mut self, response: &ChallengeResponse, current_epoch: u32, current_time: u64, public_key: &[u8]) -> Result<(), PocError> {
+    pub fn verify_response(
+        &mut self,
+        response: &ChallengeResponse,
+        current_epoch: u32,
+        current_time: u64,
+        public_key: &[u8],
+    ) -> Result<(), PocError> {
         let challenge = &response.challenge;
         let node_id = &challenge.node_id;
 
@@ -123,19 +133,26 @@ impl<V: SignatureVerifier> ProofOfConnectivity<V> {
         }
 
         // Check nonce reuse
-        if self.nonce_cache.is_used(node_id, challenge.epoch_id, &challenge.nonce, current_epoch) {
+        if self
+            .nonce_cache
+            .is_used(node_id, challenge.epoch_id, &challenge.nonce, current_epoch)
+        {
             self.record_failure(node_id, current_epoch);
             return Err(PocError::NonceAlreadyUsed);
         }
 
         // Verify signature
-        if !self.signature_verifier.verify(public_key, &challenge.nonce, &response.signature) {
+        if !self
+            .signature_verifier
+            .verify(public_key, &challenge.nonce, &response.signature)
+        {
             self.record_failure(node_id, current_epoch);
             return Err(PocError::SignatureInvalid);
         }
 
         // Mark nonce as used
-        self.nonce_cache.mark_used(node_id, challenge.epoch_id, challenge.nonce, current_epoch);
+        self.nonce_cache
+            .mark_used(node_id, challenge.epoch_id, challenge.nonce, current_epoch);
 
         // Reset failure count on success
         state.failed_challenges = 0;

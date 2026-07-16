@@ -68,7 +68,8 @@ impl RotationOrchestrator {
                 return Err(RotationError::AlreadyRotatedThisEpoch);
             }
         }
-        self.last_rotation_epoch.insert(node_id.to_string(), current_epoch);
+        self.last_rotation_epoch
+            .insert(node_id.to_string(), current_epoch);
 
         let activation_epoch = current_epoch + 2;
         // Old key expires when the new key activates plus the grace window.
@@ -82,8 +83,8 @@ impl RotationOrchestrator {
 #[cfg(test)]
 mod tests {
     extern crate std;
-    use std::vec;
     use super::*;
+    use std::vec;
 
     #[test]
     fn rotation_sets_activation_two_epochs_ahead() {
