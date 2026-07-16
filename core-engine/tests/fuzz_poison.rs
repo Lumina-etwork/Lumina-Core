@@ -136,7 +136,7 @@ fn fuzz_attacker_blacklisted_after_threshold() {
 
 #[test]
 fn fuzz_honest_relay_works_fine() {
-    let (_honest_sk, honest_vk) = generate_relay_keypair();
+    let (honest_sk, honest_vk) = generate_relay_keypair();
 
     let mut registry = RelayRegistry::new();
     registry.register_relay("honest_relay", &honest_vk);
