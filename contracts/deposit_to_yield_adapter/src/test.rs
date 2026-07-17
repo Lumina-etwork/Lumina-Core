@@ -4,7 +4,14 @@ use super::*;
 use soroban_sdk::testutils::Address as _;
 use soroban_sdk::{vec, Address, String};
 
-fn setup_env() -> (Env, DepositToYieldAdapterClient<'static>, Address, Address, Address, Address) {
+fn setup_env() -> (
+    Env,
+    DepositToYieldAdapterClient<'static>,
+    Address,
+    Address,
+    Address,
+    Address,
+) {
     let env = Env::default();
     env.mock_all_auths();
     let admin = Address::generate(&env);
@@ -13,8 +20,20 @@ fn setup_env() -> (Env, DepositToYieldAdapterClient<'static>, Address, Address, 
     let insurance_treasury = Address::generate(&env);
     let contract_id = env.register_contract(None, DepositToYieldAdapter);
     let client = DepositToYieldAdapterClient::new(&env, &contract_id);
-    client.initialize(&admin, &vesting_contract, &yield_treasury, &insurance_treasury);
-    (env, client, admin, vesting_contract, yield_treasury, insurance_treasury)
+    client.initialize(
+        &admin,
+        &vesting_contract,
+        &yield_treasury,
+        &insurance_treasury,
+    );
+    (
+        env,
+        client,
+        admin,
+        vesting_contract,
+        yield_treasury,
+        insurance_treasury,
+    )
 }
 
 #[test]
@@ -32,7 +51,11 @@ fn test_initialization() {
     client2.initialize(&admin2, &admin2, &admin2, &admin2);
 
     env.as_contract(&contract_id, || {
-        let stored: bool = env.storage().instance().get(&AdapterDataKey::IsPaused).unwrap();
+        let stored: bool = env
+            .storage()
+            .instance()
+            .get(&AdapterDataKey::IsPaused)
+            .unwrap();
         assert!(!stored);
     });
 }
@@ -143,5 +166,11 @@ fn test_deposit_while_paused() {
     client.whitelist_protocol(&admin, &protocol);
 
     client.set_pause(&admin, &true);
-    client.deposit_to_yield(&admin, &1u64, &Address::generate(&env), &Address::generate(&env), &500i128);
+    client.deposit_to_yield(
+        &admin,
+        &1u64,
+        &Address::generate(&env),
+        &Address::generate(&env),
+        &500i128,
+    );
 }

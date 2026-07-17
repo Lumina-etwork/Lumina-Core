@@ -23,7 +23,7 @@ pub struct QcValidatorConfig {
 impl Default for QcValidatorConfig {
     fn default() -> Self {
         Self {
-            n: 7,               // 3f+1 with f=2
+            n: 7, // 3f+1 with f=2
             f: 2,
             max_sigs_per_cert: 128,
             quarantine_rounds: 2,
@@ -51,13 +51,13 @@ impl QuarantineBuffer {
     /// Insert a conflicting QC into the quarantine buffer.
     pub fn insert(&mut self, qc: QuorumCertificate, current_view: u64) {
         let expires = current_view + self.config.quarantine_rounds;
-        self.entries
-            .insert((qc.view, qc.block_hash), (qc, expires));
+        self.entries.insert((qc.view, qc.block_hash), (qc, expires));
     }
 
     /// Garbage-collect expired entries.
     pub fn gc(&mut self, current_view: u64) {
-        self.entries.retain(|_, (_, expires)| *expires > current_view);
+        self.entries
+            .retain(|_, (_, expires)| *expires > current_view);
     }
 
     /// Get all quarantined QCs for a given view.

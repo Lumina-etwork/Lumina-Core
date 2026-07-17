@@ -1,4 +1,3 @@
-
 //! Core types for proof-of-connectivity protocol.
 
 use alloc::string::String;

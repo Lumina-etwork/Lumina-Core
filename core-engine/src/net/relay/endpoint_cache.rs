@@ -127,11 +127,7 @@ impl EndpointCache {
     }
 
     /// Attempt to PUT an endpoint mapping. Validates the ticket before inserting.
-    pub fn put_endpoint(
-        &mut self,
-        target_id: &str,
-        ticket: RelayTicket,
-    ) -> Result<(), CacheError> {
+    pub fn put_endpoint(&mut self, target_id: &str, ticket: RelayTicket) -> Result<(), CacheError> {
         // 1. Check blacklist
         if self.is_blacklisted(&ticket.relay_id) {
             return Err(CacheError::PeerBlacklisted);
@@ -151,11 +147,18 @@ impl EndpointCache {
                 ticket.relay_id
             )))?;
 
-        let min_epoch = self.relay_epochs.get(&ticket.relay_id).copied().unwrap_or(0);
+        let min_epoch = self
+            .relay_epochs
+            .get(&ticket.relay_id)
+            .copied()
+            .unwrap_or(0);
         ticket.verify(public_key, min_epoch)?;
 
         // 4. Update relay epoch (prevent replay of same ticket)
-        let epoch_entry = self.relay_epochs.entry(ticket.relay_id.clone()).or_insert(0);
+        let epoch_entry = self
+            .relay_epochs
+            .entry(ticket.relay_id.clone())
+            .or_insert(0);
         if ticket.epoch > *epoch_entry {
             *epoch_entry = ticket.epoch;
         }
@@ -197,10 +200,7 @@ impl EndpointCache {
     /// Report a failed verification attempt for a relay (called when
     /// a STUN binding response ticket fails verification).
     pub fn report_poison_attempt(&mut self, relay_id: &str) -> bool {
-        let penalty = self
-            .penalties
-            .entry(relay_id.to_string())
-            .or_default();
+        let penalty = self.penalties.entry(relay_id.to_string()).or_default();
 
         // Reset window if expired
         if penalty.window_start.elapsed() > Duration::from_secs(self.config.penalty_window_secs) {
@@ -305,7 +305,7 @@ mod tests {
         for _ in 0..3 {
             let mut ticket = RelayTicket::new(&sk, "relay_a", "peer_1", 1, 300);
             ticket.target_id = "tampered".to_string(); // mismatch
-            // report manually (simulating stun_bind failure path)
+                                                       // report manually (simulating stun_bind failure path)
             cache.report_poison_attempt("relay_a");
         }
         assert!(cache.is_blacklisted("relay_a"));
@@ -334,8 +334,12 @@ mod tests {
         let (mut cache, sk) = setup_cache();
         // Override to tiny capacity
         cache.config.max_cache_entries = 2;
-        cache.put_endpoint("p1", RelayTicket::new(&sk, "relay_a", "p1", 1, 300)).unwrap();
-        cache.put_endpoint("p2", RelayTicket::new(&sk, "relay_a", "p2", 2, 300)).unwrap();
+        cache
+            .put_endpoint("p1", RelayTicket::new(&sk, "relay_a", "p1", 1, 300))
+            .unwrap();
+        cache
+            .put_endpoint("p2", RelayTicket::new(&sk, "relay_a", "p2", 2, 300))
+            .unwrap();
         let result = cache.put_endpoint("p3", RelayTicket::new(&sk, "relay_a", "p3", 3, 300));
         assert!(matches!(result, Err(CacheError::CacheFull)));
     }
@@ -343,7 +347,9 @@ mod tests {
     #[test]
     fn test_stats() {
         let (mut cache, sk) = setup_cache();
-        cache.put_endpoint("peer_1", RelayTicket::new(&sk, "relay_a", "peer_1", 1, 300)).unwrap();
+        cache
+            .put_endpoint("peer_1", RelayTicket::new(&sk, "relay_a", "peer_1", 1, 300))
+            .unwrap();
         let stats = cache.stats();
         assert_eq!(stats.total_entries, 1);
         assert_eq!(stats.unique_peers, 1);

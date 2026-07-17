@@ -2,5 +2,5 @@
 
 extern crate alloc;
 
-pub mod identity;
 pub mod attestation;
+pub mod identity;

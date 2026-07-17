@@ -5,9 +5,7 @@
 /// stake record; the staking contract tracks yield accrual off-chain or via
 /// its own logic and exposes `claim_yield_for` so the vault can pull yield
 /// back to the beneficiary.
-use soroban_sdk::{
-    contract, contractimpl, contracttype, contractevent, Address, Env, Vec,
-};
+use soroban_sdk::{contract, contractevent, contractimpl, contracttype, Address, Env, Vec};
 
 // ---------------------------------------------------------------------------
 // Storage keys
@@ -85,7 +83,9 @@ impl StakingContract {
             panic!("Already initialized");
         }
         env.storage().instance().set(&DataKey::Admin, &admin);
-        env.storage().instance().set(&DataKey::YieldToken, &yield_token);
+        env.storage()
+            .instance()
+            .set(&DataKey::YieldToken, &yield_token);
     }
 
     /// Add a vault contract address to the authorised callers list.
@@ -98,7 +98,9 @@ impl StakingContract {
             .unwrap_or(Vec::new(&env));
         if !vaults.contains(&vault) {
             vaults.push_back(vault);
-            env.storage().instance().set(&DataKey::AuthorisedVaults, &vaults);
+            env.storage()
+                .instance()
+                .set(&DataKey::AuthorisedVaults, &vaults);
         }
     }
 
@@ -127,7 +129,12 @@ impl StakingContract {
             is_active: true,
         };
         env.storage().instance().set(&key, &record);
-        StakedEvent { vault_id, beneficiary, amount }.publish(&env);
+        StakedEvent {
+            vault_id,
+            beneficiary,
+            amount,
+        }
+        .publish(&env);
     }
 
     /// Remove the stake record for `beneficiary`/`vault_id`.
@@ -148,7 +155,12 @@ impl StakingContract {
         }
         record.is_active = false;
         env.storage().instance().set(&key, &record);
-        UnstakedEvent { vault_id, beneficiary, amount: record.amount }.publish(&env);
+        UnstakedEvent {
+            vault_id,
+            beneficiary,
+            amount: record.amount,
+        }
+        .publish(&env);
     }
 
     /// Return the pending yield for `beneficiary`/`vault_id` without resetting.
@@ -217,7 +229,12 @@ impl StakingContract {
         }
         record.amount -= amount;
         env.storage().instance().set(&key, &record);
-        SlashedEvent { vault_id, beneficiary, amount }.publish(&env);
+        SlashedEvent {
+            vault_id,
+            beneficiary,
+            amount,
+        }
+        .publish(&env);
     }
 
     /// Return the stake record for inspection.
@@ -229,13 +246,20 @@ impl StakingContract {
     }
 
     pub fn get_admin(env: Env) -> Address {
-        env.storage().instance().get(&DataKey::Admin).expect("Admin not set")
+        env.storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .expect("Admin not set")
     }
 
     // --- Internal helpers ---
 
     fn require_admin(env: &Env) {
-        let admin: Address = env.storage().instance().get(&DataKey::Admin).expect("Admin not set");
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .expect("Admin not set");
         admin.require_auth();
     }
 

@@ -1,8 +1,8 @@
-use ed25519_dalek::{Signer, Verifier, Signature, SigningKey, VerifyingKey};
-use serde::{Deserialize, Serialize};
-use sha2::{Sha256, Digest};
 use chrono::Utc;
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand::rngs::OsRng;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 /// A signed ticket proving a relay node is authorized to advertise
@@ -80,10 +80,14 @@ impl RelayTicket {
         let msg = Self::message_to_sign(&self.relay_id, &self.target_id, self.epoch, self.expiry);
         let sig_bytes = hex::decode(&self.signature)
             .map_err(|e| TicketError::KeyError(format!("hex decode: {}", e)))?;
-        let sig = Signature::from_bytes(&sig_bytes.try_into()
-            .map_err(|_| TicketError::KeyError("bad signature length".into()))?);
+        let sig = Signature::from_bytes(
+            &sig_bytes
+                .try_into()
+                .map_err(|_| TicketError::KeyError("bad signature length".into()))?,
+        );
 
-        relay_public_key.verify(&msg, &sig)
+        relay_public_key
+            .verify(&msg, &sig)
             .map_err(|_| TicketError::InvalidSignature)?;
 
         Ok(())
@@ -139,7 +143,10 @@ mod tests {
         let (sk, vk) = generate_relay_keypair();
         let ticket = RelayTicket::new(&sk, "relay", "peer", 1, 300);
         // min_epoch of 5 means epoch=1 is too old
-        assert!(matches!(ticket.verify(&vk, 5), Err(TicketError::ReplayDetected)));
+        assert!(matches!(
+            ticket.verify(&vk, 5),
+            Err(TicketError::ReplayDetected)
+        ));
     }
 
     #[test]
@@ -148,6 +155,9 @@ mod tests {
         let mut ticket = RelayTicket::new(&sk, "relay", "peer", 1, 300);
         // Tamper
         ticket.target_id = "attacker_peer".to_string();
-        assert!(matches!(ticket.verify(&vk, 0), Err(TicketError::InvalidSignature)));
+        assert!(matches!(
+            ticket.verify(&vk, 0),
+            Err(TicketError::InvalidSignature)
+        ));
     }
 }

@@ -1,0 +1,13 @@
+[package]
+name = "lumina-audit"
+version = "0.1.0"
+edition = "2021"
+authors = ["Lumina Core Team"]
+description = "Tamper-evident audit trail and hash-chain verification for Lumina services."
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+sha2 = "0.10"
+serde = { version = "1.0", features = ["derive"] }
+hex = "0.4"
+thiserror = "1.0"

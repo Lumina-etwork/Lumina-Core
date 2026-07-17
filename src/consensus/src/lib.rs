@@ -1,8 +1,9 @@
-pub mod view_change;
-pub mod pacemaker;
 pub mod commit;
 pub mod crypto;
+pub mod pacemaker;
+pub mod view_change;
 
+use lumina_audit::AuditEntry;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -97,4 +98,64 @@ pub enum ConsensusEvent {
         view: u64,
         new_primary: Vec<u8>,
     },
+}
+impl ConsensusEvent {
+    /// Build an audit entry representing this consensus event.
+    pub fn to_audit_entry(&self, prev_hash: [u8; 32], timestamp_ms: u64) -> AuditEntry {
+        let (action, payload) = match self {
+            ConsensusEvent::QcConflictDetected {
+                view,
+                qc_epoch_a,
+                qc_epoch_b,
+                block_hash_a,
+                block_hash_b,
+            } => (
+                "qc_conflict_detected",
+                format!(
+                    "view={};epoch_a={};epoch_b={};hash_a={};hash_b={}",
+                    view,
+                    qc_epoch_a,
+                    qc_epoch_b,
+                    hex::encode(block_hash_a),
+                    hex::encode(block_hash_b)
+                ),
+            ),
+            ConsensusEvent::ViewChangeStarted { view, reason } => (
+                "view_change_started",
+                format!("view={};reason={}", view, reason),
+            ),
+            ConsensusEvent::ViewChangeCompleted { view, new_primary } => (
+                "view_change_completed",
+                format!("view={};primary={}", view, hex::encode(new_primary)),
+            ),
+        };
+
+        AuditEntry::new(
+            0,
+            "consensus",
+            action,
+            payload.as_bytes(),
+            timestamp_ms,
+            prev_hash,
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn consensus_event_to_audit_entry_is_stable() {
+        let event = ConsensusEvent::ViewChangeStarted {
+            view: 42,
+            reason: "timeout".to_string(),
+        };
+
+        let entry_a = event.to_audit_entry([0u8; 32], 1_700_000_000);
+        let entry_b = event.to_audit_entry([0u8; 32], 1_700_000_000);
+
+        assert_eq!(entry_a.entry_hash, entry_b.entry_hash);
+        assert!(entry_a.verify_hash());
+    }
 }

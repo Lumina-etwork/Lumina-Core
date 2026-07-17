@@ -41,13 +41,8 @@ fn fuzz_1000_malicious_bindings_no_poisoning() {
         let fake_relay_id = format!("evil_relay_{}", rng.gen_range(0..5));
 
         // Generate a ticket with attacker's key (not registered)
-        let mut ticket = RelayTicket::new(
-            &attacker_sk,
-            &fake_relay_id,
-            &target_id,
-            i as u64 + 1,
-            300,
-        );
+        let mut ticket =
+            RelayTicket::new(&attacker_sk, &fake_relay_id, &target_id, i as u64 + 1, 300);
 
         // 50% chance — tamper with target (mismatch)
         if rng.gen_bool(0.5) {
@@ -97,7 +92,10 @@ fn fuzz_1000_malicious_bindings_no_poisoning() {
     // Verify the cache is clean
     let stats = cache.stats();
     println!("Cache stats: {:?}", stats);
-    assert_eq!(stats.total_entries, 0, "Cache should be empty after all fuzz attempts");
+    assert_eq!(
+        stats.total_entries, 0,
+        "Cache should be empty after all fuzz attempts"
+    );
 }
 
 #[test]
@@ -123,17 +121,22 @@ fn fuzz_attacker_blacklisted_after_threshold() {
         cache.report_poison_attempt("attacker");
     }
 
-    assert!(cache.is_blacklisted("attacker"), "Attacker should be blacklisted after 5 poison attempts");
+    assert!(
+        cache.is_blacklisted("attacker"),
+        "Attacker should be blacklisted after 5 poison attempts"
+    );
 
     // Even a valid ticket from attacker should now be rejected
     let valid_ticket = RelayTicket::new(&attacker_sk, "attacker", "victim", 6, 300);
-    assert!(cache.put_endpoint("victim", valid_ticket).is_err(),
-        "Blacklisted attacker should not be able to insert valid tickets");
+    assert!(
+        cache.put_endpoint("victim", valid_ticket).is_err(),
+        "Blacklisted attacker should not be able to insert valid tickets"
+    );
 }
 
 #[test]
 fn fuzz_honest_relay_works_fine() {
-    let (_honest_sk, honest_vk) = generate_relay_keypair();
+    let (honest_sk, honest_vk) = generate_relay_keypair();
 
     let mut registry = RelayRegistry::new();
     registry.register_relay("honest_relay", &honest_vk);
@@ -144,11 +147,20 @@ fn fuzz_honest_relay_works_fine() {
     // Submit 100 valid tickets from honest relay — all should succeed
     for i in 0..100 {
         let ticket = RelayTicket::new(&honest_sk, "honest_relay", "honest_peer", i + 1, 300);
-        assert!(cache.put_endpoint("honest_peer", ticket).is_ok(),
-            "Honest relay ticket #{} failed", i);
+        assert!(
+            cache.put_endpoint("honest_peer", ticket).is_ok(),
+            "Honest relay ticket #{} failed",
+            i
+        );
     }
 
-    assert!(!cache.is_blacklisted("honest_relay"), "Honest relay should not be blacklisted");
+    assert!(
+        !cache.is_blacklisted("honest_relay"),
+        "Honest relay should not be blacklisted"
+    );
     let stats = cache.stats();
-    assert!(stats.blacklisted_relays == 0, "No relays should be blacklisted");
+    assert!(
+        stats.blacklisted_relays == 0,
+        "No relays should be blacklisted"
+    );
 }

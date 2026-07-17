@@ -9,6 +9,7 @@ Smart contracts for blockchain-based vesting vault and token streaming infrastru
 ## Table of Contents
 
 - [Admin Key Update Implementation - Issue #16](#ADMIN-IMPLEMENTATION-md)
+- [Audit Trail and Tamper-Evident Chain Verification](#AUDIT-TRAIL-AND-TAMPER-EVIDENT-CHAIN-VERIFICATION)
 - [Analytics Backend - Revenue Prediction System](#analytics-README-md)
 - [Beneficiary Reassignment (Social Recovery / Inheritance)](#BENEFICIARY-REASSIGNMENT-SOCIAL-RECOVERY-md)
 - [On-Chain Vesting Certificate Registry](#CERTIFICATE-REGISTRY-md)
@@ -13941,3 +13942,35 @@ The implementation maintains all existing security features while adding privacy
 
 ---
 
+## Audit Trail and Tamper-Evident Chain Verification
+
+This implementation introduces a system-wide audit trail service across Lumina components.
+
+### Design
+
+- Each service records critical state transitions as `AuditEntry` records.
+- Entries include service name, action, payload hash, timestamp, and the previous entry's hash.
+- The `AuditChain` verifies integrity by recomputing each entry's digest and validating linkage.
+- Any modification to a prior record causes verification to fail at the first broken hash or previous-hash link.
+
+### Implementation
+
+- Added `src/audit_trail` crate implementing the core hash-chain logic.
+- Integrated the audit trail with:
+  - `core-engine`: Provides a `CoreAuditTrail` wrapper for attestation and relay events.
+  - `src/consensus`: Offers conversion of consensus observability events into audit entries.
+
+### Monitoring and Alerting
+
+- Services should periodically call `verify()` and raise alerts on integrity failures.
+- Track the chain root hash and chain length as observability signals.
+- Dashboard recommendations:
+  - Audit chain depth over time.
+  - Verification failure count.
+  - Latest trusted root hash and detected divergence.
+
+### Security Guarantees
+
+- The chain is tamper-evident: changing any entry invalidates all later entries.
+- Root hash verification locks the entire history into a single digest.
+- Service-level audit events support cross-service tracing of governance, attestation, and consensus decisions.
