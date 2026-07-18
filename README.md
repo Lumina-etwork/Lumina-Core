@@ -1,5 +1,9 @@
 # Lumina-Core
 
+[![CI](https://github.com/Lumina-etwork/Lumina-Core/actions/workflows/ci.yml/badge.svg)](https://github.com/Lumina-etwork/Lumina-Core/actions/workflows/ci.yml)
+[![Contracts WASM](https://github.com/Lumina-etwork/Lumina-Core/actions/workflows/contracts.yml/badge.svg)](https://github.com/Lumina-etwork/Lumina-Core/actions/workflows/contracts.yml)
+[![Security Audit](https://github.com/Lumina-etwork/Lumina-Core/actions/workflows/security.yml/badge.svg)](https://github.com/Lumina-etwork/Lumina-Core/actions/workflows/security.yml)
+
 Smart contracts for blockchain-based vesting vault and token streaming infrastructure with governance, compliance, and cross-chain capabilities on Stellar Soroban.
 
 ## 🚀 Key Features

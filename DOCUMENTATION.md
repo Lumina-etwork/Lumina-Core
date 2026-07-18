@@ -6,6 +6,68 @@ Smart contracts for blockchain-based vesting vault and token streaming infrastru
 - **Network:** Stellar Testnet
 - **Contract ID:** CD6OGC46OFCV52IJQKEDVKLX5ASA3ZMSTHAAZQIPDSJV6VZ3KUJDEP4D
 
+## CI/CD Architecture
+
+### Workflows
+
+| Workflow | Archivo | Se activa en | Propósito |
+|----------|---------|-------------|-----------|
+| CI | `.github/workflows/ci.yml` | PR + push a `main` | Lint, tests, integración |
+| Contracts WASM | `.github/workflows/contracts.yml` | Cambios en `contracts/` | Build WASM paralelo por contrato |
+| Security Audit | `.github/workflows/security.yml` | Push a `main` + lunes 08:00 UTC | Auditoría de deps + secretos |
+| Release | `.github/workflows/release.yml` | Push a `main` | Blue-green + canary |
+| Notifications | `.github/workflows/notify.yml` | Fallo en workflows anteriores | Alertas Slack/Discord |
+
+### Estrategia de Deploy Blue-Green
+
+```
+Commit en main
+     │
+     ▼
+build-release  ──────────────────────────────────────┐
+     │                                               │
+     ▼                                               │
+deploy-canary (slot inactivo, 10% tráfico)           │
+     │                                               │
+     ▼                                               │
+canary-analysis (5 min, P99 < 100ms, error < 0.1%)  │
+     │                                               │
+  ┌──┴──┐                                            │
+PASS   FAIL                                          │
+  │      └─── rollback (slot activo sigue en prod) ──┘
+  ▼
+promote-production (swap blue ↔ green, 100% tráfico)
+ACTIVE_SLOT = nuevo slot
+```
+
+El estado del slot activo se guarda en la variable de repositorio `ACTIVE_SLOT` (`Settings > Variables`). Alterna automáticamente entre `blue` y `green` en cada deploy exitoso.
+
+### CI Local
+
+Para correr los mismos checks del CI en tu máquina:
+
+```bash
+# Todos los checks
+./scripts/ci-local.sh
+
+# Solo lint
+./scripts/ci-local.sh check
+
+# Solo contratos WASM
+./scripts/ci-local.sh contracts
+
+# Solo auditoría de seguridad
+./scripts/ci-local.sh security
+```
+
+### Caché
+
+- Cargo registry + git index → clave por `Cargo.lock` hash
+- Stellar CLI binario → clave por versión (`22.1.0`)
+- Hit rate objetivo: > 80% en builds repetidos
+
+---
+
 ## Table of Contents
 
 - [Admin Key Update Implementation - Issue #16](#ADMIN-IMPLEMENTATION-md)
