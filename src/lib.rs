@@ -3,5 +3,7 @@
 extern crate alloc;
 
 pub mod attestation;
+pub mod capacity;
 pub mod identity;
-pub mod secret_rotation;
+
+pub mod job_scheduler;
