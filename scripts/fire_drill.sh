@@ -162,7 +162,7 @@ cat > "$REPORT_FILE" <<EOF
 - **Recovery Host**: ${RECOVERY_HOST}:${RECOVERY_PORT}
 
 ## Conclusion
-The disaster recovery fire drill was completed successfully. The database was recovered from encrypted S3 backup to a new server instance in ${RTO_MINUTES} minutes, which is ${$([ $RTO_SECONDS -lt 1800 ] && echo "WITHIN" || echo "BEYOND")} the 30-minute RTO target.
+The disaster recovery fire drill was completed successfully. The database was recovered from encrypted S3 backup to a new server instance in ${RTO_MINUTES} minutes, which is $(if [[ $RTO_SECONDS -lt 1800 ]]; then echo "WITHIN"; else echo "BEYOND"; fi) the 30-minute RTO target.
 
 ## Recommendations
 $(if [[ $RTO_STATUS == "PASS" ]]; then
