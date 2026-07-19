@@ -5,11 +5,12 @@
 use actix_web::{web, App, HttpServer, middleware};
 use sqlx::postgres::PgPool;
 use std::sync::Arc;
-use tracing::{info, error};
+use tracing::{error, info};
 
 mod comments;
 mod messaging;
 mod websocket;
+mod telemetry;
 
 /// Application state
 pub struct AppState {
@@ -50,7 +51,17 @@ async fn authenticate(
 pub async fn run_server(db_pool: PgPool) -> std::io::Result<()> {
     let app_state = Arc::new(AppState { db_pool });
 
-    info!("Starting Social API server on http://0.0.0.0:8081");
+    let log_resource = telemetry::init(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+
+    info!(
+        service.name = log_resource.service_name,
+        service.version = log_resource.service_version,
+        deployment.environment.name = %log_resource.deployment_environment,
+        network.local.address = "0.0.0.0",
+        network.local.port = 8081_u16,
+        url.scheme = "http",
+        "starting social api server"
+    );
 
     HttpServer::new(move || {
         App::new()
@@ -92,8 +103,8 @@ pub async fn run_server(db_pool: PgPool) -> std::io::Result<()> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_health_check_response() {
+    #[actix_rt::test]
+    async fn test_health_check_response() {
         let response = actix_web::test::call_service(
             &App::new().route("/health", web::get().to(health_check)),
             actix_web::test::TestRequest::get().uri("/health").to_request(),

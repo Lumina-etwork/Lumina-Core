@@ -1,13 +1,14 @@
 //! WebSocket Server for Real-time Messaging
-//! 
+//!
 //! Implements WebSocket connections for instant message delivery
 
 use actix::{prelude::*, Actor, StreamHandler};
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
-use std::time::{Duration, Instant};
-use uuid::Uuid;
 use serde::{Deserialize, Serialize};
+use std::time::{Duration, Instant};
+use tracing::{debug, info, warn};
+use uuid::Uuid;
 
 /// How often heartbeat pings are sent
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
@@ -26,9 +27,7 @@ pub enum WsMessage {
         nonce: String,
     },
     /// Mark messages as read
-    MarkRead {
-        message_ids: Vec<Uuid>,
-    },
+    MarkRead { message_ids: Vec<Uuid> },
     /// Typing indicator
     Typing {
         conversation_id: Uuid,
@@ -40,9 +39,7 @@ pub enum WsMessage {
         status: String,
     },
     /// Error message
-    Error {
-        message: String,
-    },
+    Error { message: String },
 }
 
 /// WebSocket session for each user
@@ -62,12 +59,18 @@ impl Actor for WsSession {
 
     fn started(&mut self, ctx: &mut Self::Context) {
         self.hb = Instant::now();
-        
+
         // Start heartbeat
         ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
             // Check client still responds
             if Instant::now().duration_since(act.hb) > CLIENT_TIMEOUT {
-                println!("WebSocket client heartbeat failed, disconnecting!");
+                warn!(
+                    service.name = env!("CARGO_PKG_NAME"),
+                    service.version = env!("CARGO_PKG_VERSION"),
+                    session.id = %act.id,
+                    enduser.id = %act.user_id,
+                    "websocket client heartbeat failed; disconnecting"
+                );
                 ctx.stop();
                 return;
             }
@@ -76,11 +79,24 @@ impl Actor for WsSession {
             ctx.ping(b"");
         });
 
-        println!("WebSocket session started for user: {}", act.user_id);
+        info!(
+            service.name = env!("CARGO_PKG_NAME"),
+            service.version = env!("CARGO_PKG_VERSION"),
+            session.id = %self.id,
+            enduser.id = %self.user_id,
+            db.available = self.db_available,
+            "websocket session started"
+        );
     }
 
     fn stopped(&mut self, _ctx: &mut Self::Context) {
-        println!("WebSocket session stopped for user: {}", self.user_id);
+        info!(
+            service.name = env!("CARGO_PKG_NAME"),
+            service.version = env!("CARGO_PKG_VERSION"),
+            session.id = %self.id,
+            enduser.id = %self.user_id,
+            "websocket session stopped"
+        );
     }
 }
 
@@ -108,7 +124,14 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
             }
             Ok(ws::Message::Binary(bin)) => {
                 // Could support binary messages for efficiency
-                println!("Received binary message: {} bytes", bin.len());
+                debug!(
+                    service.name = env!("CARGO_PKG_NAME"),
+                    service.version = env!("CARGO_PKG_VERSION"),
+                    session.id = %self.id,
+                    enduser.id = %self.user_id,
+                    message.size = bin.len(),
+                    "received websocket binary message"
+                );
             }
             Ok(ws::Message::Close(reason)) => {
                 ctx.close(reason);
@@ -130,11 +153,7 @@ impl WsSession {
     }
 
     /// Handle incoming WebSocket message
-    fn handle_ws_message(
-        &mut self,
-        msg: WsMessage,
-        ctx: &mut ws::WebsocketContext<Self>,
-    ) {
+    fn handle_ws_message(&mut self, msg: WsMessage, ctx: &mut ws::WebsocketContext<Self>) {
         match msg {
             WsMessage::SendMessage {
                 recipient_id,
@@ -142,11 +161,15 @@ impl WsSession {
                 nonce,
             } => {
                 // In production, save to database and forward to recipient
-                println!(
-                    "User {} sending message to {}: {}",
-                    self.user_id,
-                    recipient_id,
-                    encrypted_content.chars().take(20).collect::<String>()
+                info!(
+                    service.name = env!("CARGO_PKG_NAME"),
+                    service.version = env!("CARGO_PKG_VERSION"),
+                    session.id = %self.id,
+                    enduser.id = %self.user_id,
+                    messaging.destination.id = %recipient_id,
+                    messaging.message.body.size = encrypted_content.len(),
+                    messaging.message.envelope.size = nonce.len(),
+                    "websocket send message requested"
                 );
 
                 // Send acknowledgment
@@ -160,8 +183,15 @@ impl WsSession {
                 // This would require an Actor address registry
             }
             WsMessage::MarkRead { message_ids } => {
-                println!("User {} marked {} messages as read", self.user_id, message_ids.len());
-                
+                info!(
+                    service.name = env!("CARGO_PKG_NAME"),
+                    service.version = env!("CARGO_PKG_VERSION"),
+                    session.id = %self.id,
+                    enduser.id = %self.user_id,
+                    messaging.message.count = message_ids.len(),
+                    "websocket messages marked read"
+                );
+
                 // Update database and notify sender
                 let ack = WsMessage::Ack {
                     message_id: None,
@@ -174,17 +204,26 @@ impl WsSession {
                 is_typing,
             } => {
                 // Forward typing indicator to conversation participant
-                println!(
-                    "User {} is {} typing in conversation {}",
-                    self.user_id,
-                    if is_typing { "" } else { "not " },
-                    conversation_id
+                debug!(
+                    service.name = env!("CARGO_PKG_NAME"),
+                    service.version = env!("CARGO_PKG_VERSION"),
+                    session.id = %self.id,
+                    enduser.id = %self.user_id,
+                    messaging.conversation.id = %conversation_id,
+                    messaging.typing = is_typing,
+                    "websocket typing indicator received"
                 );
-                
+
                 // TODO: Forward to other participant
             }
             _ => {
-                println!("Unhandled message type");
+                debug!(
+                    service.name = env!("CARGO_PKG_NAME"),
+                    service.version = env!("CARGO_PKG_VERSION"),
+                    session.id = %self.id,
+                    enduser.id = %self.user_id,
+                    "unhandled websocket message type"
+                );
             }
         }
     }
@@ -232,13 +271,13 @@ impl MessageBroadcaster {
     /// Register a session
     pub fn register(&mut self, user_id: Uuid, addr: Addr<WsSession>) {
         self.sessions.insert(user_id, addr);
-        println!("User {} connected. Total sessions: {}", user_id, self.sessions.len());
+        info!(enduser.id = %user_id, websocket.sessions = self.sessions.len(), "websocket user connected");
     }
 
     /// Unregister a session
     pub fn unregister(&mut self, user_id: Uuid) {
         self.sessions.remove(&user_id);
-        println!("User {} disconnected. Total sessions: {}", user_id, self.sessions.len());
+        info!(enduser.id = %user_id, websocket.sessions = self.sessions.len(), "websocket user disconnected");
     }
 
     /// Send message to specific user
@@ -249,7 +288,7 @@ impl MessageBroadcaster {
                 addr.do_send(ws::Message::Text(text.into()));
             }
         } else {
-            println!("User {} not online, message not delivered", recipient_id);
+            warn!(messaging.destination.id = %recipient_id, "websocket recipient offline; message not delivered");
         }
     }
 
