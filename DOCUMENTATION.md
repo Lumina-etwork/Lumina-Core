@@ -6,6 +6,68 @@ Smart contracts for blockchain-based vesting vault and token streaming infrastru
 - **Network:** Stellar Testnet
 - **Contract ID:** CD6OGC46OFCV52IJQKEDVKLX5ASA3ZMSTHAAZQIPDSJV6VZ3KUJDEP4D
 
+## CI/CD Architecture
+
+### Workflows
+
+| Workflow | Archivo | Se activa en | Propósito |
+|----------|---------|-------------|-----------|
+| CI | `.github/workflows/ci.yml` | PR + push a `main` | Lint, tests, integración |
+| Contracts WASM | `.github/workflows/contracts.yml` | Cambios en `contracts/` | Build WASM paralelo por contrato |
+| Security Audit | `.github/workflows/security.yml` | Push a `main` + lunes 08:00 UTC | Auditoría de deps + secretos |
+| Release | `.github/workflows/release.yml` | Push a `main` | Blue-green + canary |
+| Notifications | `.github/workflows/notify.yml` | Fallo en workflows anteriores | Alertas Slack/Discord |
+
+### Estrategia de Deploy Blue-Green
+
+```
+Commit en main
+     │
+     ▼
+build-release  ──────────────────────────────────────┐
+     │                                               │
+     ▼                                               │
+deploy-canary (slot inactivo, 10% tráfico)           │
+     │                                               │
+     ▼                                               │
+canary-analysis (5 min, P99 < 100ms, error < 0.1%)  │
+     │                                               │
+  ┌──┴──┐                                            │
+PASS   FAIL                                          │
+  │      └─── rollback (slot activo sigue en prod) ──┘
+  ▼
+promote-production (swap blue ↔ green, 100% tráfico)
+ACTIVE_SLOT = nuevo slot
+```
+
+El estado del slot activo se guarda en la variable de repositorio `ACTIVE_SLOT` (`Settings > Variables`). Alterna automáticamente entre `blue` y `green` en cada deploy exitoso.
+
+### CI Local
+
+Para correr los mismos checks del CI en tu máquina:
+
+```bash
+# Todos los checks
+./scripts/ci-local.sh
+
+# Solo lint
+./scripts/ci-local.sh check
+
+# Solo contratos WASM
+./scripts/ci-local.sh contracts
+
+# Solo auditoría de seguridad
+./scripts/ci-local.sh security
+```
+
+### Caché
+
+- Cargo registry + git index → clave por `Cargo.lock` hash
+- Stellar CLI binario → clave por versión (`22.1.0`)
+- Hit rate objetivo: > 80% en builds repetidos
+
+---
+
 ## Table of Contents
 
 - [Admin Key Update Implementation - Issue #16](#ADMIN-IMPLEMENTATION-md)
@@ -6463,6 +6525,65 @@ Potential future improvements:
 ## Conclusion
 
 The delegate claiming feature provides a secure and flexible solution for beneficiaries to use hot wallets for claiming operations while maintaining the security of their cold wallet holdings. The implementation follows best practices for smart contract security and gas optimization.
+
+---
+
+
+## Source: MULTI_REGION_DR.md
+
+# Multi-Region Replication and Disaster Recovery Testing
+
+## Architecture
+
+Lumina Core uses an active/passive multi-region posture for stateful services and an active/active posture for stateless APIs. The primary write region owns database writes, object backups are encrypted and replicated to each standby region, and read-only services can be served regionally when replication lag is within target. Regional promotion is performed through a blue-green deployment in the target region followed by a canary traffic shift.
+
+## Operational Targets
+
+| Target | Value | Enforcement |
+|--------|-------|-------------|
+| Critical path latency | < 100 ms p99 | Canary dashboard gate |
+| Availability | 99.99% uptime | Multi-region health checks and failover |
+| Replication lag | <= 5 seconds | CloudWatch `Lumina/Replication` alarm |
+| RTO | < 30 minutes | `scripts/fire_drill.sh` and regional restore report |
+| RPO | < 5 minutes | Replication lag and backup freshness alarms |
+
+## Validation Harness
+
+Run a static validation without cloud credentials:
+
+```bash
+./scripts/multi_region_dr_test.sh --dry-run --canary-percent 5
+```
+
+Run a live validation after configuring `.env.multi-region-dr`:
+
+```bash
+PRIMARY_REGION=us-east-1
+SECONDARY_REGIONS="us-west-2 eu-west-1"
+AWS_BUCKET=lumina-dr-backups
+POSTGRES_DB=lumina_core
+./scripts/multi_region_dr_test.sh --canary-percent 5
+```
+
+The harness verifies backup visibility in each standby region, checks replication lag against the RPO guardrail, records blue-green canary intent, and writes an auditable markdown report to `backups/multi_region_dr/`.
+
+## Monitoring and Alerting
+
+Create alerts for these metrics before enabling automatic failover:
+
+- `Lumina/Replication LagMilliseconds` greater than `5000` for two datapoints.
+- `Lumina/API CriticalPathP99Milliseconds` greater than `100` during canary analysis.
+- Backup freshness older than `300` seconds in any standby region.
+- Regional health-check failure for two consecutive checks.
+
+## Deployment and Failover Runbook
+
+1. Deploy the green stack in the standby region with writes disabled.
+2. Confirm encrypted backups and replication streams are current in every standby region.
+3. Shift `5%` traffic to green and monitor p99 latency, error rate, and replication lag for at least 15 minutes.
+4. Promote the target region, enable writes, and raise traffic in `25%` increments only while all gates stay green.
+5. Run `scripts/fire_drill.sh` after promotion to prove RTO and data-integrity controls.
+6. Keep the old blue region read-only until security review and reconciliation complete.
 
 ---
 
