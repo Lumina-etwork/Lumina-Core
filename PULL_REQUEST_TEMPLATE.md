@@ -161,7 +161,7 @@ The implementation is thoroughly tested, well-documented, and ready for producti
 
 ## Checklist
 - [x] Governance veto system implemented
-- [x] Lock-up periods system implemented  
+- [x] Lock-up periods system implemented
 - [x] Beneficiary reassignment system implemented
 - [x] Comprehensive test coverage
 - [x] Documentation complete
@@ -169,3 +169,14 @@ The implementation is thoroughly tested, well-documented, and ready for producti
 - [x] Security considerations addressed
 - [x] Gas optimization completed
 - [x] Integration testing done
+
+## CI Gates
+> Todos deben estar en verde antes de hacer merge.
+
+- [ ] `CI / lint` — rustfmt + clippy pasan sin warnings
+- [ ] `CI / core-infra` — consensus, audit_trail, core-engine compilaron y tests pasan
+- [ ] `CI / contracts-a` — contratos WASM compilaron y tests pasan
+- [ ] `CI / backends` — analytics y social compilaron y tests pasan
+- [ ] `CI / integration` — workspace completo + doc_tests pasan
+- [ ] `Security Audit / dependency-audit` — sin vulnerabilidades conocidas
+- [ ] `Security Audit / secrets-scan` — sin secretos expuestos
