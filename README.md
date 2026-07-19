@@ -25,13 +25,19 @@ Ensure you have the required toolchains installed:
 ```bash
 # Clone the repository (if running manually)
 git clone https://github.com/Lumina-etwork/Lumina-Core
+cd Lumina-Core
 
-# Build the smart contracts
-cargo build --target wasm32-unknown-unknown --release
+# Validate prerequisites without changing your machine
+scripts/setup-local-dev.sh --check
 
-# Run workspace tests
-cargo test
+# Bootstrap the local toolchain, build contracts, and run tests
+scripts/setup-local-dev.sh
 ```
+
+The onboarding script verifies Rust, rustup, and the WASM target required for
+Soroban contracts. It also detects the Stellar/Soroban CLI for deployment
+workflows and supports `--dry-run`, `--skip-build`, and `--skip-tests` for
+incremental setup.
 
 ## 🤝 Contributing
 Contributions are highly welcome. Please ensure your commits are cryptographically signed using GPG or SSH keys. For major structural changes, please open an issue first to discuss your proposal.
