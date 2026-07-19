@@ -6466,6 +6466,65 @@ The delegate claiming feature provides a secure and flexible solution for benefi
 
 ---
 
+
+## Source: MULTI_REGION_DR.md
+
+# Multi-Region Replication and Disaster Recovery Testing
+
+## Architecture
+
+Lumina Core uses an active/passive multi-region posture for stateful services and an active/active posture for stateless APIs. The primary write region owns database writes, object backups are encrypted and replicated to each standby region, and read-only services can be served regionally when replication lag is within target. Regional promotion is performed through a blue-green deployment in the target region followed by a canary traffic shift.
+
+## Operational Targets
+
+| Target | Value | Enforcement |
+|--------|-------|-------------|
+| Critical path latency | < 100 ms p99 | Canary dashboard gate |
+| Availability | 99.99% uptime | Multi-region health checks and failover |
+| Replication lag | <= 5 seconds | CloudWatch `Lumina/Replication` alarm |
+| RTO | < 30 minutes | `scripts/fire_drill.sh` and regional restore report |
+| RPO | < 5 minutes | Replication lag and backup freshness alarms |
+
+## Validation Harness
+
+Run a static validation without cloud credentials:
+
+```bash
+./scripts/multi_region_dr_test.sh --dry-run --canary-percent 5
+```
+
+Run a live validation after configuring `.env.multi-region-dr`:
+
+```bash
+PRIMARY_REGION=us-east-1
+SECONDARY_REGIONS="us-west-2 eu-west-1"
+AWS_BUCKET=lumina-dr-backups
+POSTGRES_DB=lumina_core
+./scripts/multi_region_dr_test.sh --canary-percent 5
+```
+
+The harness verifies backup visibility in each standby region, checks replication lag against the RPO guardrail, records blue-green canary intent, and writes an auditable markdown report to `backups/multi_region_dr/`.
+
+## Monitoring and Alerting
+
+Create alerts for these metrics before enabling automatic failover:
+
+- `Lumina/Replication LagMilliseconds` greater than `5000` for two datapoints.
+- `Lumina/API CriticalPathP99Milliseconds` greater than `100` during canary analysis.
+- Backup freshness older than `300` seconds in any standby region.
+- Regional health-check failure for two consecutive checks.
+
+## Deployment and Failover Runbook
+
+1. Deploy the green stack in the standby region with writes disabled.
+2. Confirm encrypted backups and replication streams are current in every standby region.
+3. Shift `5%` traffic to green and monitor p99 latency, error rate, and replication lag for at least 15 minutes.
+4. Promote the target region, enable writes, and raise traffic in `25%` increments only while all gates stay green.
+5. Run `scripts/fire_drill.sh` after promotion to prove RTO and data-integrity controls.
+6. Keep the old blue region read-only until security review and reconciliation complete.
+
+---
+
 ## Source: DISASTER_RECOVERY.md
 
 # Disaster Recovery & Backup Procedures
