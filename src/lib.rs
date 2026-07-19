@@ -4,3 +4,4 @@ extern crate alloc;
 
 pub mod attestation;
 pub mod identity;
+pub mod sensitive_payload;
