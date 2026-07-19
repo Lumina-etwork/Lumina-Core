@@ -3,5 +3,7 @@
 extern crate alloc;
 
 pub mod attestation;
+pub mod capacity;
 pub mod identity;
-pub mod sensitive_payload;
+
+pub mod job_scheduler;
