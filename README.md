@@ -11,6 +11,9 @@ Smart contracts for blockchain-based vesting vault and token streaming infrastru
 * **Language/Framework:** Rust / Soroban WASM
 * **Key Dependencies:** `soroban-sdk`
 
+## 🧪 Operational Readiness
+* **Staging Chaos Engineering:** See the [staging chaos engineering blueprint](docs/chaos-engineering-staging.md) for experiment guardrails, observability requirements, blue-green canary gates, and runbook expectations.
+
 ## 📦 Getting Started
 
 ### Prerequisites
