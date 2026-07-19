@@ -1,0 +1,31 @@
+groups:
+  - name: lumina-incident-response
+    interval: 30s
+    rules:
+      - alert: LuminaCriticalPathP99LatencyHigh
+        expr: histogram_quantile(0.99, sum(rate(lumina_request_duration_seconds_bucket[5m])) by (le, service)) > 0.100
+        for: 2m
+        labels:
+          severity: critical
+          pagerduty: enabled
+        annotations:
+          summary: "{{ $labels.service }} P99 latency exceeded 100ms"
+          runbook: "docs/operations/incident-response-pagerduty.md"
+      - alert: LuminaServiceAvailabilityBelowSlo
+        expr: (sum(rate(lumina_requests_total{status!~"5.."}[5m])) by (service) / sum(rate(lumina_requests_total[5m])) by (service)) < 0.9999
+        for: 2m
+        labels:
+          severity: critical
+          pagerduty: enabled
+        annotations:
+          summary: "{{ $labels.service }} availability dropped below 99.99%"
+          runbook: "docs/operations/incident-response-pagerduty.md"
+      - alert: LuminaCanaryErrorBudgetBurn
+        expr: lumina_canary_error_budget_burn_rate > 1
+        for: 1m
+        labels:
+          severity: warning
+          pagerduty: enabled
+        annotations:
+          summary: "Canary burn rate is above the deployment gate"
+          runbook: "docs/operations/incident-response-pagerduty.md"
