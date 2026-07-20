@@ -1,0 +1,27 @@
+title = "Lumina-Core Gitleaks Config"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id          = "soroban-secret-key"
+description = "Stellar/Soroban secret key (S...)"
+regex       = '''S[A-Z2-7]{55}'''
+tags        = ["stellar", "soroban", "key"]
+
+[[rules]]
+id          = "lumina-api-key"
+description = "Lumina internal API key pattern"
+regex       = '''lumina_(?:api|svc|admin)_[0-9a-f]{32}'''
+tags        = ["lumina", "api-key"]
+
+[allowlist]
+paths = [
+  "doc_tests/",
+  "docs/",
+  "tests/",
+]
+regexes = [
+  # Known test public keys used in test fixtures
+  '''GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN''',
+]
