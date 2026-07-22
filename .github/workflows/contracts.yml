@@ -16,6 +16,7 @@ on:
 env:
   RUST_VERSION: "1.91.0"
   STELLAR_CLI_VERSION: "22.1.0"
+  DOCKER_BUILDKIT: "1"
 
 jobs:
   build-wasm:
@@ -60,7 +61,47 @@ jobs:
         if: steps.stellar-cache.outputs.cache-hit != 'true'
         run: cargo install --locked stellar-cli@${{ env.STELLAR_CLI_VERSION }}
 
-      - name: Build ${{ matrix.contract }} (WASM)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build WASM via Docker (cached)
+        id: docker-build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: build
+          push: false
+          load: true
+          tags: lumina-wasm-build:${{ github.sha }}
+          cache-from: |
+            type=gha,scope=lumina-wasm-${{ matrix.contract }}
+            type=gha,scope=lumina-core-infra
+            type=gha,scope=lumina-base-toolchain
+          cache-to: type=gha,mode=max,scope=lumina-wasm-${{ matrix.contract }}
+          build-args: |
+            RUST_VERSION=${{ env.RUST_VERSION }}
+            STELLAR_CLI_VERSION=${{ env.STELLAR_CLI_VERSION }}
+
+      - name: Extract WASM artifacts from image
+        run: |
+          CONTAINER=$(docker create lumina-wasm-build:${{ github.sha }})
+          mkdir -p target/wasm32-unknown-unknown/release/
+          docker cp "$CONTAINER:/build/target/wasm32-unknown-unknown/release/." \
+            target/wasm32-unknown-unknown/release/ || true
+          docker rm "$CONTAINER"
+
+      - name: Push cache metrics
+        if: always()
+        env:
+          PUSHGATEWAY_URL: ${{ secrets.PUSHGATEWAY_URL }}
+        run: |
+          ./scripts/push-cache-metrics.sh \
+            '${{ steps.docker-build.outputs.metadata }}' \
+            lumina-wasm-${{ matrix.contract }} \
+            build \
+            "0"
+
+      - name: Build ${{ matrix.contract }} (WASM) — native fallback
         run: |
           cargo build -p ${{ matrix.contract }} \
             --target wasm32-unknown-unknown \

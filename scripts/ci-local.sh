@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ci-local.sh — Ejecuta los mismos checks del CI en tu máquina local
-# Uso: ./scripts/ci-local.sh [check|contracts|all]
+# Uso: ./scripts/ci-local.sh [check|contracts|security|docker|all]
 # Por defecto corre 'all'
 
 set -euo pipefail
@@ -84,6 +84,36 @@ run_backends() {
   done
 }
 
+# ── DOCKER LAYER CACHE BUILD ─────────────────────────────────────────────────
+run_docker() {
+  header "Docker Layer Cache Build"
+
+  if ! command -v docker &>/dev/null; then
+    echo "  skipping docker build (docker no instalado)"
+    return
+  fi
+
+  DOCKER_CACHE_DIR="${HOME}/.cache/lumina-docker-build"
+  mkdir -p "$DOCKER_CACHE_DIR"
+
+  TARGET="${DOCKER_TARGET:-build}"
+  START=$(date +%s)
+
+  if DOCKER_BUILDKIT=1 docker build \
+      --target "$TARGET" \
+      --cache-from "type=local,src=${DOCKER_CACHE_DIR}" \
+      --cache-to "type=local,dest=${DOCKER_CACHE_DIR},mode=max" \
+      --build-arg "RUST_VERSION=${RUST_VERSION:-1.91.0}" \
+      --build-arg "STELLAR_CLI_VERSION=${STELLAR_CLI_VERSION:-22.1.0}" \
+      -t "lumina-core:local" \
+      . 2>/dev/null; then
+    END=$(date +%s)
+    pass "docker build (target=${TARGET}, $((END-START))s)"
+  else
+    fail "docker build (target=${TARGET})"
+  fi
+}
+
 # ── SECURITY ─────────────────────────────────────────────────────────────────
 run_security() {
   header "Security"
@@ -143,8 +173,8 @@ case "$MODE" in
   security)
     run_security
     ;;
-  hooks)
-    run_hooks
+  docker)
+    run_docker
     ;;
   all)
     run_lint
@@ -152,10 +182,10 @@ case "$MODE" in
     run_contracts
     run_backends
     run_security
-    run_hooks
+    run_docker
     ;;
   *)
-    echo "Uso: $0 [check|contracts|security|hooks|all]"
+    echo "Uso: $0 [check|contracts|security|docker|all]"
     exit 1
     ;;
 esac
