@@ -137,6 +137,31 @@ run_security() {
   fi
 }
 
+# ── HOOK TESTS ───────────────────────────────────────────────────────────────
+run_hooks() {
+  header "Pre-commit Hook Tests"
+
+  if command -v bats &>/dev/null; then
+    if bats tests/hooks/ --quiet 2>/dev/null; then
+      pass "hook unit tests (bats)"
+    else
+      fail "hook unit tests (bats)"
+    fi
+  else
+    echo "  skipping hook tests (bats not installed — brew install bats-core)"
+  fi
+
+  if command -v shellcheck &>/dev/null; then
+    if shellcheck --severity=warning scripts/hooks/*.sh 2>/dev/null; then
+      pass "hook shellcheck"
+    else
+      fail "hook shellcheck"
+    fi
+  else
+    echo "  skipping shellcheck (not installed — brew install shellcheck)"
+  fi
+}
+
 # ── MAIN ─────────────────────────────────────────────────────────────────────
 case "$MODE" in
   check)

@@ -291,11 +291,30 @@ jobs:
         working-directory: ${{ matrix.service }}
         run: cargo test
 
+  # ── 1.5. HOOK TESTS ──────────────────────────────────────────────────────────
+  hook-tests:
+    name: Pre-commit Hook Tests (BATS)
+    runs-on: ubuntu-latest
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install BATS and shellcheck
+        run: |
+          sudo apt-get install -y bats shellcheck
+          bats --version
+
+      - name: Run hook unit tests
+        run: bats tests/hooks/
+
+      - name: Lint hook scripts with shellcheck
+        run: shellcheck --severity=warning scripts/hooks/*.sh
+
   # ── 5. INTEGRATION (depende de todos los anteriores) ───────────────────────
   integration:
     name: Integration & Doc Tests
     runs-on: ubuntu-latest
-    needs: [lint, core-infra, contracts-a, backends]
+    needs: [lint, core-infra, contracts-a, backends, hook-tests]
     steps:
       - uses: actions/checkout@v4
 

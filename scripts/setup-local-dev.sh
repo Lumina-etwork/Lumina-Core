@@ -93,6 +93,36 @@ if [[ "$CHECK_ONLY" == true ]]; then
   exit 0
 fi
 
+# ── Install pre-commit hooks ──────────────────────────────────────────────────
+install_hooks() {
+  local git_dir
+  git_dir=$(git -C "$ROOT" rev-parse --git-dir 2>/dev/null || true)
+  if [[ -z "$git_dir" ]]; then
+    warn "not inside a git repository — skipping hook installation"
+    return
+  fi
+  local hooks_src="$ROOT/scripts/hooks"
+  local hooks_dst="$git_dir/hooks"
+
+  for hook in pre-commit commit-msg pre-push; do
+    local src="$hooks_src/$hook"
+    local dst="$hooks_dst/$hook"
+    if [[ ! -f "$src" ]]; then
+      warn "hook source not found: $src — skipping"
+      continue
+    fi
+    if [[ "$DRY_RUN" == true ]]; then
+      printf '[setup-local-dev] dry-run: install hook %s -> %s\n' "$src" "$dst"
+    else
+      cp "$src" "$dst"
+      chmod +x "$dst"
+      log "installed hook: $hook"
+    fi
+  done
+}
+
+install_hooks
+
 if [[ "$SKIP_BUILD" == false ]]; then
   log "building default smart contracts for wasm32-unknown-unknown"
   run cargo build --target wasm32-unknown-unknown --release

@@ -1,0 +1,45 @@
+groups:
+  - name: lumina-pre-commit-hooks
+    rules:
+      - alert: PreCommitHookFailureSpike
+        expr: |
+          sum(rate(pre_commit_hook_checks_total{result="fail"}[30m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: developer-tooling
+        annotations:
+          summary: "Pre-commit hook failures spiking above baseline"
+          description: >
+            More than 0.1 failures/second across all developer hook runs in the past 30m.
+            This may indicate a broken hook configuration or a toolchain regression.
+            Check scripts/hooks/ and run: bats tests/hooks/
+          runbook: "docs/runbooks/pre-commit-hooks.md"
+
+      - alert: PreCommitHookTooSlow
+        expr: |
+          pre_commit_hook_duration_ms > 30000
+        for: 2m
+        labels:
+          severity: warning
+          service: developer-tooling
+        annotations:
+          summary: "Pre-commit hook exceeding 30s on {{ $labels.instance }}"
+          description: >
+            Hook run duration exceeded 30 seconds. Target P99 is under 15s for
+            Rust-touching commits. Investigate parallelism in scripts/hooks/pre-commit.
+          runbook: "docs/runbooks/pre-commit-hooks.md"
+
+      - alert: PreCommitHookMetricsStale
+        expr: |
+          (time() - max(pre_commit_hook_duration_ms) by (instance)) > 172800
+        for: 1h
+        labels:
+          severity: info
+          service: developer-tooling
+        annotations:
+          summary: "No pre-commit hook metrics from {{ $labels.instance }} in 48h"
+          description: >
+            A developer workstation has not emitted hook metrics for 48 hours.
+            The developer may have uninstalled the hooks. Run setup-local-dev.sh to reinstall.
+          runbook: "docs/runbooks/pre-commit-hooks.md"
