@@ -15,6 +15,7 @@ on:
 env:
   RUST_VERSION: "1.91.0"
   STELLAR_CLI_VERSION: "22.1.0"
+  DOCKER_BUILDKIT: "1"
 
 jobs:
   # ── 1. Determinar slot activo (blue/green) ──────────────────────────────────
@@ -47,6 +48,7 @@ jobs:
     needs: [determine-slot]
     outputs:
       artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      image-digest: ${{ steps.docker-release.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
 
@@ -77,6 +79,46 @@ jobs:
         if: steps.stellar-cache.outputs.cache-hit != 'true'
         run: cargo install --locked stellar-cli@${{ env.STELLAR_CLI_VERSION }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build final Docker image (cached)
+        id: docker-release
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: final
+          push: false
+          load: true
+          tags: |
+            lumina-core:${{ github.sha }}
+            lumina-core:latest
+          cache-from: |
+            type=gha,scope=lumina-release-final
+            type=gha,scope=lumina-core-infra
+            type=gha,scope=lumina-base-toolchain
+          cache-to: type=gha,mode=max,scope=lumina-release-final
+          build-args: |
+            RUST_VERSION=${{ env.RUST_VERSION }}
+            STELLAR_CLI_VERSION=${{ env.STELLAR_CLI_VERSION }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.repositoryUrl }}
+
+      - name: Save Docker image as tarball
+        run: docker save lumina-core:${{ github.sha }} | gzip > lumina-core-image.tar.gz
+
+      - name: Push cache metrics
+        if: always()
+        env:
+          PUSHGATEWAY_URL: ${{ secrets.PUSHGATEWAY_URL }}
+        run: |
+          ./scripts/push-cache-metrics.sh \
+            '${{ steps.docker-release.outputs.metadata }}' \
+            lumina-release-final \
+            final \
+            "0"
+
       - name: Build all contracts (WASM release)
         run: |
           cargo build --target wasm32-unknown-unknown --release \
@@ -98,11 +140,21 @@ jobs:
             target/release/lumina_core
           retention-days: 30
 
+      - name: Upload Docker image artifact
+        id: upload-image
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image-${{ github.sha }}
+          path: lumina-core-image.tar.gz
+          retention-days: 7
+
       - name: Build summary
         run: |
           echo "## Build — ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "- Target slot: **${{ needs.determine-slot.outputs.target-slot }}**" >> $GITHUB_STEP_SUMMARY
           echo "- Contracts built: grant_contracts, staking_contract, deposit_to_yield_adapter, insurance_treasury" >> $GITHUB_STEP_SUMMARY
+          echo "- Docker image digest: \`${{ steps.docker-release.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Docker cache scope: \`lumina-release-final\` (type=gha, mode=max)" >> $GITHUB_STEP_SUMMARY
 
   # ── 3. Deploy Canary (10% tráfico en slot target) ──────────────────────────
   deploy-canary:
@@ -119,11 +171,25 @@ jobs:
           name: release-${{ github.sha }}
           path: ./artifacts
 
+      - name: Download Docker image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image-${{ github.sha }}
+          path: ./docker-artifacts
+
+      - name: Load Docker image
+        run: |
+          docker load < ./docker-artifacts/lumina-core-image.tar.gz
+          echo "Image loaded: lumina-core:${{ github.sha }}"
+          echo "Digest: ${{ needs.build-release.outputs.image-digest }}"
+
       - name: Deploy to ${{ needs.determine-slot.outputs.target-slot }} slot (10% traffic)
         env:
           TARGET_SLOT: ${{ needs.determine-slot.outputs.target-slot }}
+          IMAGE_DIGEST: ${{ needs.build-release.outputs.image-digest }}
         run: |
           echo "Deploying ${{ github.sha }} to slot: $TARGET_SLOT (10% canary traffic)"
+          echo "Docker image: lumina-core@${IMAGE_DIGEST}"
           ls -la ./artifacts/ 2>/dev/null || echo "(no artifacts)"
           # Añadir aquí el comando real de deploy cuando esté listo el entorno
 
@@ -160,6 +226,7 @@ jobs:
           echo "|--------|--------|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| P99 latency | < 100ms | PASS |" >> $GITHUB_STEP_SUMMARY
           echo "| Error rate | < 0.1% | PASS |" >> $GITHUB_STEP_SUMMARY
+          echo "| Docker image | ${{ needs.build-release.outputs.image-digest }} | — |" >> $GITHUB_STEP_SUMMARY
           echo "| Commit | ${{ github.sha }} | — |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Status: PASS — promoting to 100%**" >> $GITHUB_STEP_SUMMARY
@@ -202,6 +269,7 @@ jobs:
           echo "- Previous slot: **${{ needs.determine-slot.outputs.active-slot }}** (standby)" >> $GITHUB_STEP_SUMMARY
           echo "- Commit: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "- Strategy: Blue-Green swap" >> $GITHUB_STEP_SUMMARY
+          echo "- Docker image digest: \`${{ needs.build-release.outputs.image-digest }}\`" >> $GITHUB_STEP_SUMMARY
 
   # ── 6. Rollback automático si canary falla ──────────────────────────────────
   rollback:

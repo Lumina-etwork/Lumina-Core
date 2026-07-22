@@ -11,6 +11,7 @@ env:
   RUST_VERSION: "1.91.0"
   STELLAR_CLI_VERSION: "22.1.0"
   CARGO_TERM_COLOR: always
+  DOCKER_BUILDKIT: "1"
 
 jobs:
   # ── 1. LINT (falla rápido) ──────────────────────────────────────────────────
@@ -36,6 +37,32 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-lint-
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Warm base-toolchain Docker layer
+        id: docker-lint
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: base-toolchain
+          push: false
+          cache-from: type=gha,scope=lumina-base-toolchain
+          cache-to: type=gha,mode=max,scope=lumina-base-toolchain
+          build-args: |
+            RUST_VERSION=${{ env.RUST_VERSION }}
+
+      - name: Push cache metrics
+        if: always()
+        env:
+          PUSHGATEWAY_URL: ${{ secrets.PUSHGATEWAY_URL }}
+        run: |
+          ./scripts/push-cache-metrics.sh \
+            '${{ steps.docker-lint.outputs.metadata }}' \
+            lumina-base-toolchain \
+            base-toolchain \
+            "0"
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -65,6 +92,35 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-core-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-core-
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Warm deps-cache Docker layer
+        id: docker-core
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: deps-cache
+          push: false
+          cache-from: |
+            type=gha,scope=lumina-core-infra
+            type=gha,scope=lumina-base-toolchain
+          cache-to: type=gha,mode=max,scope=lumina-core-infra
+          build-args: |
+            RUST_VERSION=${{ env.RUST_VERSION }}
+            STELLAR_CLI_VERSION=${{ env.STELLAR_CLI_VERSION }}
+
+      - name: Push cache metrics
+        if: always()
+        env:
+          PUSHGATEWAY_URL: ${{ secrets.PUSHGATEWAY_URL }}
+        run: |
+          ./scripts/push-cache-metrics.sh \
+            '${{ steps.docker-core.outputs.metadata }}' \
+            lumina-core-infra \
+            deps-cache \
+            "0"
 
       - name: Build consensus
         run: cargo build -p lumina-consensus
@@ -118,6 +174,36 @@ jobs:
         if: steps.stellar-cli-cache.outputs.cache-hit != 'true'
         run: cargo install --locked stellar-cli@${{ env.STELLAR_CLI_VERSION }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Warm WASM build Docker layer
+        id: docker-contracts
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: build
+          push: false
+          cache-from: |
+            type=gha,scope=lumina-wasm-contracts-a
+            type=gha,scope=lumina-core-infra
+            type=gha,scope=lumina-base-toolchain
+          cache-to: type=gha,mode=max,scope=lumina-wasm-contracts-a
+          build-args: |
+            RUST_VERSION=${{ env.RUST_VERSION }}
+            STELLAR_CLI_VERSION=${{ env.STELLAR_CLI_VERSION }}
+
+      - name: Push cache metrics
+        if: always()
+        env:
+          PUSHGATEWAY_URL: ${{ secrets.PUSHGATEWAY_URL }}
+        run: |
+          ./scripts/push-cache-metrics.sh \
+            '${{ steps.docker-contracts.outputs.metadata }}' \
+            lumina-wasm-contracts-a \
+            build \
+            "0"
+
       - name: Build grant_contracts (WASM)
         run: cargo build -p grant_contracts --target wasm32-unknown-unknown --release
 
@@ -167,6 +253,36 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ matrix.service }}-${{ hashFiles(format('{0}/Cargo.lock', matrix.service)) }}
           restore-keys: ${{ runner.os }}-cargo-${{ matrix.service }}-
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Warm backend Docker layer (${{ matrix.service }})
+        id: docker-backend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: build
+          push: false
+          cache-from: |
+            type=gha,scope=lumina-backend-${{ matrix.service }}
+            type=gha,scope=lumina-core-infra
+            type=gha,scope=lumina-base-toolchain
+          cache-to: type=gha,mode=max,scope=lumina-backend-${{ matrix.service }}
+          build-args: |
+            RUST_VERSION=${{ env.RUST_VERSION }}
+            STELLAR_CLI_VERSION=${{ env.STELLAR_CLI_VERSION }}
+
+      - name: Push cache metrics
+        if: always()
+        env:
+          PUSHGATEWAY_URL: ${{ secrets.PUSHGATEWAY_URL }}
+        run: |
+          ./scripts/push-cache-metrics.sh \
+            '${{ steps.docker-backend.outputs.metadata }}' \
+            lumina-backend-${{ matrix.service }} \
+            build \
+            "0"
+
       - name: Build ${{ matrix.service }}
         working-directory: ${{ matrix.service }}
         run: cargo build
@@ -199,6 +315,35 @@ jobs:
           key: ${{ runner.os }}-cargo-integration-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-integration-
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Warm integration Docker layer
+        id: docker-integration
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: build
+          push: false
+          cache-from: |
+            type=gha,scope=lumina-core-infra
+            type=gha,scope=lumina-base-toolchain
+          cache-to: type=gha,mode=max,scope=lumina-core-infra
+          build-args: |
+            RUST_VERSION=${{ env.RUST_VERSION }}
+            STELLAR_CLI_VERSION=${{ env.STELLAR_CLI_VERSION }}
+
+      - name: Push cache metrics
+        if: always()
+        env:
+          PUSHGATEWAY_URL: ${{ secrets.PUSHGATEWAY_URL }}
+        run: |
+          ./scripts/push-cache-metrics.sh \
+            '${{ steps.docker-integration.outputs.metadata }}' \
+            lumina-core-infra \
+            build \
+            "0"
+
       - name: Run workspace tests
         run: cargo test --workspace
 
@@ -216,3 +361,12 @@ jobs:
           echo "| core-infra | ${{ needs.core-infra.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| contracts-a | ${{ needs.contracts-a.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| backends | ${{ needs.backends.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Docker Layer Cache" >> $GITHUB_STEP_SUMMARY
+          echo "| Scope | Cache |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| lumina-base-toolchain | type=gha,mode=max |" >> $GITHUB_STEP_SUMMARY
+          echo "| lumina-core-infra | type=gha,mode=max |" >> $GITHUB_STEP_SUMMARY
+          echo "| lumina-wasm-contracts-a | type=gha,mode=max |" >> $GITHUB_STEP_SUMMARY
+          echo "| lumina-backend-analytics | type=gha,mode=max |" >> $GITHUB_STEP_SUMMARY
+          echo "| lumina-backend-social | type=gha,mode=max |" >> $GITHUB_STEP_SUMMARY
