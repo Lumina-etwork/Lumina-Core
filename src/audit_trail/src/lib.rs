@@ -314,8 +314,8 @@ impl AuditEntry {
         hasher.update(self.timestamp_ms.to_le_bytes());
         Self::update_with_length_prefixed(&mut hasher, self.service.as_bytes());
         Self::update_with_length_prefixed(&mut hasher, self.action.as_bytes());
-        hasher.update(&self.payload_hash);
-        hasher.update(&self.prev_hash);
+        hasher.update(self.payload_hash);
+        hasher.update(self.prev_hash);
         let result = hasher.finalize();
         let mut output = [0u8; 32];
         output.copy_from_slice(&result);

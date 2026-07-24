@@ -205,25 +205,25 @@ jobs:
             "0"
 
       - name: Build grant_contracts (WASM)
-        run: cargo build -p grant_contracts --target wasm32-unknown-unknown --release
+        run: cargo build -p grant_contracts --target wasm32v1-none --release
 
       - name: Test grant_contracts
         run: cargo test -p grant_contracts
 
       - name: Build staking_contract (WASM)
-        run: cargo build -p staking_contract --target wasm32-unknown-unknown --release
+        run: cargo build -p staking_contract --target wasm32v1-none --release
 
       - name: Test staking_contract
         run: cargo test -p staking_contract
 
       - name: Build deposit_to_yield_adapter (WASM)
-        run: cargo build -p deposit_to_yield_adapter --target wasm32-unknown-unknown --release
+        run: cargo build -p deposit_to_yield_adapter --target wasm32v1-none --release
 
       - name: Test deposit_to_yield_adapter
         run: cargo test -p deposit_to_yield_adapter
 
       - name: Build insurance_treasury (WASM)
-        run: cargo build -p insurance_treasury --target wasm32-unknown-unknown --release
+        run: cargo build -p insurance_treasury --target wasm32v1-none --release
 
       - name: Test insurance_treasury
         run: cargo test -p insurance_treasury

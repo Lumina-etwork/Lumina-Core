@@ -74,7 +74,7 @@ RUN cargo build \
       -p staking_contract \
       -p deposit_to_yield_adapter \
       -p insurance_treasury \
-      --target wasm32-unknown-unknown --release 2>/dev/null || true
+      --target wasm32v1-none --release 2>/dev/null || true
 
 # Calentar dependencias de los backends (workspaces independientes)
 COPY analytics/Cargo.toml ./analytics/Cargo.toml
@@ -112,7 +112,7 @@ RUN cargo build \
       -p staking_contract \
       -p deposit_to_yield_adapter \
       -p insurance_treasury \
-      --target wasm32-unknown-unknown --release
+      --target wasm32v1-none --release
 
 # Build de backends (workspaces independientes)
 RUN cd analytics && cargo build --release
@@ -137,7 +137,7 @@ RUN useradd -r -s /bin/false lumina
 COPY --from=build /build/target/release/lumina_core          /usr/local/bin/lumina_core
 
 # Artefactos WASM
-COPY --from=build /build/target/wasm32-unknown-unknown/release/*.wasm /artifacts/
+COPY --from=build /build/target/wasm32v1-none/release/*.wasm /artifacts/
 
 # Backends
 COPY --from=build /build/analytics/target/release/analytics  /usr/local/bin/analytics
