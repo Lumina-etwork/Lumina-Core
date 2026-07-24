@@ -40,6 +40,7 @@ jobs:
 
       - name: Generate workspace coverage
         run: |
+          mkdir -p target/llvm-cov
           cargo llvm-cov --workspace --all-features --summary-only --output-path target/llvm-cov/coverage-summary.txt
 
       - name: Enforce coverage threshold
