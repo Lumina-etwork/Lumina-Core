@@ -92,7 +92,7 @@ impl SecretVersion {
     }
 
     pub fn is_active_at(&self, now_secs: u64) -> bool {
-        now_secs >= self.activated_at_secs && now_secs < self.expires_at_secs
+        (self.activated_at_secs..self.expires_at_secs).contains(&now_secs)
     }
 }
 
@@ -272,7 +272,6 @@ fn success_bps(sample: CanarySample) -> u16 {
 
 #[cfg(test)]
 mod tests {
-    extern crate std;
     use super::*;
     use std::vec;
 
