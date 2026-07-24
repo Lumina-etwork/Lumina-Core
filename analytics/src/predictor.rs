@@ -44,8 +44,8 @@ pub struct PredictionFactors {
 pub struct HistoricalStreamData {
     pub timestamp: DateTime<Utc>,
     pub revenue: f64,
-    pub active_streams: u32,
-    pub cancellations: u32,
+    pub active_streams: i32,
+    pub cancellations: i32,
 }
 
 /// Main prediction engine
@@ -70,8 +70,8 @@ impl RevenuePredictor {
             return 0.0;
         }
 
-        let total_streams: u32 = data.iter().map(|d| d.active_streams).sum();
-        let total_cancellations: u32 = data.iter().map(|d| d.cancellations).sum();
+        let total_streams: i32 = data.iter().map(|d| d.active_streams).sum();
+        let total_cancellations: i32 = data.iter().map(|d| d.cancellations).sum();
 
         if total_streams == 0 {
             return 0.0;
@@ -247,7 +247,7 @@ mod tests {
                 timestamp: Utc::now() - Duration::days((30 - day) as i64),
                 revenue,
                 active_streams: 10,
-                cancellations: (day % 3) as u32,
+                cancellations: (day % 3) as i32,
             });
             
             // Simulate some growth with noise
