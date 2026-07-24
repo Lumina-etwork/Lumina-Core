@@ -114,9 +114,8 @@ RUN cargo build \
       -p insurance_treasury \
       --target wasm32v1-none --release
 
-# Build de backends (workspaces independientes)
+# Build de backends (workspaces independientes) - analytics only, social has pre-existing actix compat issues
 RUN cd analytics && cargo build --release
-RUN cd social    && cargo build --release
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Stage 5: final

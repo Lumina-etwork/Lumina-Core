@@ -56,10 +56,7 @@ impl NonceCache {
     pub fn mark_used(&mut self, node_id: &str, epoch_id: u32, nonce: [u8; 32], current_epoch: u32) {
         self.cleanup(current_epoch);
 
-        let node_entries = self
-            .entries
-            .entry(node_id.to_string())
-            .or_default();
+        let node_entries = self.entries.entry(node_id.to_string()).or_default();
         let epoch_nonces = node_entries.entry(epoch_id).or_default();
 
         if !epoch_nonces.contains(&nonce) {
