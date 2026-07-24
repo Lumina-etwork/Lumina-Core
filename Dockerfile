@@ -140,7 +140,7 @@ COPY --from=build /build/target/wasm32v1-none/release/*.wasm /artifacts/
 
 # Backends
 COPY --from=build /build/analytics/target/release/analytics  /usr/local/bin/analytics
-COPY --from=build /build/social/target/release/social        /usr/local/bin/social
+# social backend excluded: pre-existing actix compat issue (see PR #97)
 
 USER lumina
 EXPOSE 8080
