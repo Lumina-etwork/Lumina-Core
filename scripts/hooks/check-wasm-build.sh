@@ -13,7 +13,7 @@ FAILED=0
 for contract in "${CONTRACTS[@]}"; do
   if echo "$STAGED" | grep -q "contracts/${contract}/"; then
     printf '[check-wasm-build] Building %s...\n' "$contract" >&2
-    if ! cargo build -p "$contract" --target wasm32-unknown-unknown --release --quiet; then
+    if ! cargo build -p "$contract" --target wasm32v1-none --release --quiet; then
       printf '[check-wasm-build] FAILED: %s\n' "$contract" >&2
       FAILED=1
     fi

@@ -121,7 +121,7 @@ jobs:
 
       - name: Build all contracts (WASM release)
         run: |
-          cargo build --target wasm32-unknown-unknown --release \
+          cargo build --target wasm32v1-none --release \
             -p grant_contracts \
             -p staking_contract \
             -p deposit_to_yield_adapter \
@@ -136,7 +136,7 @@ jobs:
         with:
           name: release-${{ github.sha }}
           path: |
-            target/wasm32-unknown-unknown/release/*.wasm
+            target/wasm32v1-none/release/*.wasm
             target/release/lumina_core
           retention-days: 30
 

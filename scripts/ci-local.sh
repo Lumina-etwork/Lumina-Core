@@ -53,7 +53,7 @@ run_contracts() {
   header "Smart Contracts (workspace)"
 
   for crate in grant_contracts staking_contract deposit_to_yield_adapter insurance_treasury; do
-    if cargo build -p "$crate" --target wasm32-unknown-unknown --release --quiet 2>/dev/null; then
+    if cargo build -p "$crate" --target wasm32v1-none --release --quiet 2>/dev/null; then
       pass "wasm build: $crate"
     else
       fail "wasm build: $crate"
