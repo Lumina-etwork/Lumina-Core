@@ -310,11 +310,22 @@ jobs:
       - name: Lint hook scripts with shellcheck
         run: shellcheck --severity=warning scripts/hooks/*.sh
 
+  # ── 1.6. BACKUP VERIFICATION TESTS ───────────────────────────────────────────
+  backup-verify-tests:
+    name: Backup Verification Script Tests
+    runs-on: ubuntu-latest
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run verify_backup.sh tests
+        run: bash scripts/test_verify_backup.sh
+
   # ── 5. INTEGRATION (depende de todos los anteriores) ───────────────────────
   integration:
     name: Integration & Doc Tests
     runs-on: ubuntu-latest
-    needs: [lint, core-infra, contracts-a, backends, hook-tests]
+    needs: [lint, core-infra, contracts-a, backends, hook-tests, backup-verify-tests]
     steps:
       - uses: actions/checkout@v4
 
