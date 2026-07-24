@@ -28,7 +28,7 @@ impl EquivocationDetector {
 
     pub fn handle_proposal(&mut self, proposal: Proposal) -> Option<EquivocationProof> {
         let height = proposal.height;
-        let proposals = self.seen_proposals.entry(height).or_insert_with(Vec::new);
+        let proposals = self.seen_proposals.entry(height).or_default();
 
         for existing in proposals.iter() {
             // Equivocation detection: 2 conflicting proposals at same height with valid signatures
