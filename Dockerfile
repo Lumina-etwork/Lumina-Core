@@ -5,7 +5,7 @@ ARG STELLAR_CLI_VERSION=22.1.0
 # Stage 1: base-toolchain
 # Invalida cuando: RUST_VERSION cambia
 # ══════════════════════════════════════════════════════════════════════════════
-FROM rust:${RUST_VERSION}-bookworm-slim AS base-toolchain
+FROM rust:${RUST_VERSION}-slim-bookworm AS base-toolchain
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
