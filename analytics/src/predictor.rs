@@ -36,7 +36,7 @@ pub struct PredictionFactors {
     pub churn_rate: f64,
     pub growth_rate: f64,
     pub volatility: f64,
-    pub stream_count: u32,
+    pub stream_count: i32,
 }
 
 /// Historical data point for analysis
