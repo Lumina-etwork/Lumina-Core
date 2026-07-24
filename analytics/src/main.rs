@@ -4,7 +4,7 @@
 
 use actix_web::{web, App, Error, HttpResponse, HttpServer};
 use serde::{Deserialize, Serialize};
-use sqlx::postgres::PgPool;
+use sqlx::postgres::{PgPool, PgPoolOptions};
 use sqlx::Row;
 use std::sync::Arc;
 use tracing::{error, info};
@@ -196,4 +196,23 @@ pub async fn run_server(db_pool: PgPool) -> std::io::Result<()> {
     .bind("0.0.0.0:8080")?
     .run()
     .await
+}
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info".into()),
+        )
+        .init();
+
+    let database_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://localhost:5432/lumina".to_string());
+    let pool = PgPoolOptions::new()
+        .connect(&database_url)
+        .await
+        .expect("Failed to connect to database");
+
+    run_server(pool).await
 }
