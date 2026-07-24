@@ -1,6 +1,7 @@
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::fmt::Write;
 
 /// PagerDuty Events API action for an incident automation event.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -113,11 +114,13 @@ impl PagerDutyEvent {
             if idx > 0 {
                 details.push(',');
             }
-            details.push_str(&format!(
+            write!(
+                details,
                 "\"{}\":\"{}\"",
                 escape_json(key),
                 escape_json(value)
-            ));
+            )
+            .expect("write to String is infallible");
         }
         details.push('}');
 
