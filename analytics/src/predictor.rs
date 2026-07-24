@@ -9,7 +9,6 @@
 use chrono::{DateTime, Duration, Utc};
 use ndarray::{Array1, Array2};
 use rand::distributions::Distribution;
-use rand::Rng;
 use statrs::distribution::{Normal, StudentsT};
 use serde::{Deserialize, Serialize};
 
@@ -165,6 +164,7 @@ impl RevenuePredictor {
 
         // Monte Carlo simulation (1000 iterations)
         let simulations = 1000;
+        let mut rng = rand::thread_rng();
         let mut predicted_revenues = Vec::with_capacity(simulations);
 
         for _ in 0..simulations {
@@ -179,7 +179,7 @@ impl RevenuePredictor {
                 // Add random shock (geometric Brownian motion)
                 let shock = Normal::new(0.0, daily_volatility)
                     .ok()?
-                    .sample();
+                    .sample(&mut rng);
                 revenue *= 1.0 + shock;
 
                 // Ensure non-negative
