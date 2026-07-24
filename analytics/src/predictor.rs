@@ -40,7 +40,7 @@ pub struct PredictionFactors {
 }
 
 /// Historical data point for analysis
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, sqlx::FromRow)]
 pub struct HistoricalStreamData {
     pub timestamp: DateTime<Utc>,
     pub revenue: f64,
@@ -171,7 +171,7 @@ impl RevenuePredictor {
             let mut revenue = base_revenue;
             let daily_volatility = volatility / (30.0_f64).sqrt(); // Daily vol from monthly
 
-            for day in 0..period_days {
+            for _day in 0..period_days {
                 // Apply growth and churn
                 let net_growth = growth_rate / 30.0 - churn_rate / 30.0;
                 revenue *= 1.0 + net_growth;

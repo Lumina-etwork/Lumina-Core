@@ -59,8 +59,8 @@ impl NonceCache {
         let node_entries = self
             .entries
             .entry(node_id.to_string())
-            .or_insert_with(BTreeMap::new);
-        let epoch_nonces = node_entries.entry(epoch_id).or_insert_with(Vec::new);
+            .or_default();
+        let epoch_nonces = node_entries.entry(epoch_id).or_default();
 
         if !epoch_nonces.contains(&nonce) {
             epoch_nonces.push(nonce);
@@ -69,11 +69,7 @@ impl NonceCache {
 
     /// Remove all entries for epochs older than `current_epoch - 2`.
     fn cleanup(&mut self, current_epoch: u32) {
-        let min_epoch = if current_epoch >= 2 {
-            current_epoch - 2
-        } else {
-            0
-        };
+        let min_epoch = current_epoch.saturating_sub(2);
 
         self.entries.retain(|_, node_entries| {
             node_entries.retain(|&epoch, _| epoch >= min_epoch);

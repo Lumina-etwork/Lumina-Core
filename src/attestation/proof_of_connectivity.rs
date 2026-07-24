@@ -31,18 +31,10 @@ impl Default for PocConfig {
 }
 
 /// Tracks state for failed challenges and blacklisting.
+#[derive(Default)]
 struct NodeState {
     failed_challenges: u32,
     blacklisted_until_epoch: u32,
-}
-
-impl Default for NodeState {
-    fn default() -> Self {
-        Self {
-            failed_challenges: 0,
-            blacklisted_until_epoch: 0,
-        }
-    }
 }
 
 /// Main proof-of-connectivity manager.

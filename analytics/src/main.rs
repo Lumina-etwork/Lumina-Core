@@ -147,10 +147,10 @@ async fn get_stream_stats(
         Ok(Some(row)) => Ok(HttpResponse::Ok().json(serde_json::json!({
             "creator_id": creator_id,
             "total_streams": row.get::<i64, _>("total_streams"),
-            "total_mrr": row.get::<f64, _>("total_mrr").unwrap_or(0.0),
-            "avg_stream_value": row.get::<f64, _>("avg_stream_value").unwrap_or(0.0),
-            "active_streams": row.get::<i64, _>("active_count").unwrap_or(0),
-            "churned_streams": row.get::<i64, _>("cancelled_count").unwrap_or(0),
+            "total_mrr": row.try_get::<f64, _>("total_mrr").unwrap_or(0.0),
+            "avg_stream_value": row.try_get::<f64, _>("avg_stream_value").unwrap_or(0.0),
+            "active_streams": row.try_get::<i64, _>("active_count").unwrap_or(0),
+            "churned_streams": row.try_get::<i64, _>("cancelled_count").unwrap_or(0),
         }))),
         Ok(None) => Ok(HttpResponse::NotFound().json(serde_json::json!({
             "error": "Creator not found"
