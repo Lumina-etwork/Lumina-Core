@@ -8,8 +8,9 @@
 
 use chrono::{DateTime, Duration, Utc};
 use ndarray::{Array1, Array2};
+use rand::distributions::Distribution;
+use rand::Rng;
 use statrs::distribution::{Normal, StudentsT};
-use statrs::statistics::Distribution;
 use serde::{Deserialize, Serialize};
 
 /// Revenue prediction data point

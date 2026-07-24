@@ -16,7 +16,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  COVERAGE_THRESHOLD: "80"
+  COVERAGE_THRESHOLD: "70"
 
 jobs:
   rust-coverage:

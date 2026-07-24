@@ -9,7 +9,7 @@ description = "Exclusive comment system and messaging backend for Stellar Protoc
 actix-web = "4"
 actix-rt = "2"
 actix-web-actors = "4"
-actix = "0.13"
+actix = "0.12"
 
 # Database
 sqlx = { version = "0.7", features = ["runtime-tokio-native-tls", "postgres"] }

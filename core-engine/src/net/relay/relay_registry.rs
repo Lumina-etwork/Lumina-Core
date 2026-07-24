@@ -20,6 +20,12 @@ pub struct RelayInfo {
     pub active: bool,
 }
 
+impl Default for RelayRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RelayRegistry {
     pub fn new() -> Self {
         Self {

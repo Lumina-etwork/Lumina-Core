@@ -5,6 +5,7 @@
 use actix_web::{web, App, Error, HttpResponse, HttpServer};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgPool;
+use sqlx::Row;
 use std::sync::Arc;
 use tracing::{error, info};
 
