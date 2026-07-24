@@ -85,9 +85,9 @@ jobs:
       - name: Extract WASM artifacts from image
         run: |
           CONTAINER=$(docker create lumina-wasm-build:${{ github.sha }})
-          mkdir -p target/wasm32-unknown-unknown/release/
-          docker cp "$CONTAINER:/build/target/wasm32-unknown-unknown/release/." \
-            target/wasm32-unknown-unknown/release/ || true
+          mkdir -p target/wasm32v1-none/release/
+          docker cp "$CONTAINER:/build/target/wasm32v1-none/release/." \
+            target/wasm32v1-none/release/ || true
           docker rm "$CONTAINER"
 
       - name: Push cache metrics
@@ -104,12 +104,12 @@ jobs:
       - name: Build ${{ matrix.contract }} (WASM) — native fallback
         run: |
           cargo build -p ${{ matrix.contract }} \
-            --target wasm32-unknown-unknown \
+            --target wasm32v1-none \
             --release
 
       - name: Verify WASM artifact
         run: |
-          WASM_FILE=$(find target/wasm32-unknown-unknown/release -name "*.wasm" | head -1)
+          WASM_FILE=$(find target/wasm32v1-none/release -name "*.wasm" | head -1)
           if [ -z "$WASM_FILE" ]; then
             echo "ERROR: No WASM artifact found for ${{ matrix.contract }}"
             exit 1
@@ -120,7 +120,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: wasm-${{ matrix.contract }}
-          path: target/wasm32-unknown-unknown/release/*.wasm
+          path: target/wasm32v1-none/release/*.wasm
           retention-days: 7
 
   # Verifica que todos los contratos pasaron antes de mergear

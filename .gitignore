@@ -5,3 +5,10 @@ target
 .soroban
 .stellar
 contracts/invoke_results.txt
+
+# Build artifacts / developer machine output
+build_errors.txt
+build_errors_local.txt
+invoke_matches.txt
+ful_structure3.txt
+test_output.txt

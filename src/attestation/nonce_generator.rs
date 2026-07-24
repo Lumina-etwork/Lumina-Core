@@ -25,7 +25,7 @@ impl NonceGenerator {
     pub fn generate(&self, epoch_id: u32, node_id: &str) -> [u8; 32] {
         let mut hasher = Blake2b512::new();
         hasher.update(epoch_id.to_be_bytes());
-        hasher.update(&self.seed);
+        hasher.update(self.seed);
         hasher.update(node_id.as_bytes());
 
         let hash = hasher.finalize();

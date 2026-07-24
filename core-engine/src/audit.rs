@@ -7,6 +7,12 @@ pub struct CoreAuditTrail {
     chain: AuditChain,
 }
 
+impl Default for CoreAuditTrail {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CoreAuditTrail {
     /// Create a new audit trail with an optional anchor hash.
     pub fn new() -> Self {

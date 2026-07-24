@@ -80,7 +80,7 @@ mod tests {
     fn test_epoch_tie_breaker() {
         let h1 = [1u8; 32];
         let pk = vec![1u8; 32];
-        let a = make_qc(1, 5, h1, &[pk.clone()]);
+        let a = make_qc(1, 5, h1, std::slice::from_ref(&pk));
         let b = make_qc(1, 3, h1, &[pk]);
 
         assert_eq!(compare_qcs(&a, &b), Ordering::Greater);
@@ -108,8 +108,8 @@ mod tests {
         let pk = vec![1u8; 32];
 
         let qcs = vec![
-            make_qc(1, 2, h1, &[pk.clone()]),
-            make_qc(1, 5, h2, &[pk.clone()]), // higher epoch — should win
+            make_qc(1, 2, h1, std::slice::from_ref(&pk)),
+            make_qc(1, 5, h2, std::slice::from_ref(&pk)), // higher epoch — should win
             make_qc(1, 1, h2, &[pk]),
         ];
 
@@ -122,7 +122,7 @@ mod tests {
     fn test_equivalent_qcs() {
         let h = [42u8; 32];
         let pk = vec![7u8; 32];
-        let a = make_qc(1, 5, h, &[pk.clone()]);
+        let a = make_qc(1, 5, h, std::slice::from_ref(&pk));
         let b = make_qc(1, 5, h, &[pk]);
 
         assert_eq!(resolve_conflict(&a, &b), ConflictResolution::Equivalent);

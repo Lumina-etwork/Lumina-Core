@@ -29,3 +29,23 @@ groups:
         annotations:
           summary: "Canary burn rate is above the deployment gate"
           runbook: "docs/operations/incident-response-pagerduty.md"
+      - alert: LuminaBackupVerificationFailed
+        expr: lumina_backup_verification_status == 0 and lumina_backup_verification_last_run_seconds > 0
+        for: 10m
+        labels:
+          severity: critical
+          pagerduty: enabled
+        annotations:
+          summary: "Scheduled backup verification has failed for {{ $labels.environment }}"
+          description: "The latest backup verification run reported FAIL status. Check the verification report in backups/verification/ for details."
+          runbook: "docs/runbooks/backup-verification.md"
+      - alert: LuminaBackupVerificationMissing
+        expr: (time() - lumina_backup_verification_last_run_seconds) > 90000
+        for: 30m
+        labels:
+          severity: warning
+          pagerduty: enabled
+        annotations:
+          summary: "No backup verification has completed in the last 25 hours"
+          description: "The scheduled backup verification cron job may be down or stalled. Check the cron scheduler and verify_backup.sh logs."
+          runbook: "docs/runbooks/backup-verification.md"

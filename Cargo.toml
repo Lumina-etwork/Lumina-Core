@@ -5,7 +5,6 @@ edition = "2021"
 
 [dependencies]
 blake2 = { workspace = true }
-alloc = { version = "1.0.0", package = "rustc-std-workspace-alloc", optional = true }
 
 [dev-dependencies]
 proptest = "1.0"

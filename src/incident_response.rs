@@ -1,6 +1,7 @@
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::fmt::Write;
 
 /// PagerDuty Events API action for an incident automation event.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -113,11 +114,13 @@ impl PagerDutyEvent {
             if idx > 0 {
                 details.push(',');
             }
-            details.push_str(&format!(
+            write!(
+                details,
                 "\"{}\":\"{}\"",
                 escape_json(key),
                 escape_json(value)
-            ));
+            )
+            .expect("write to String is infallible");
         }
         details.push('}');
 
@@ -160,17 +163,18 @@ impl IncidentRunbookAutomation {
         steps: &[RunbookStep],
     ) -> PagerDutyEvent {
         let severity = classify_severity(slo, observed_p99_ms, observed_availability_bps);
-        let mut custom_details = Vec::new();
-        custom_details.push(("runbook_url".to_string(), self.runbook_url.clone()));
-        custom_details.push((
-            "deployment_strategy".to_string(),
-            self.deployment_strategy.clone(),
-        ));
-        custom_details.push(("latency_p99_ms".to_string(), observed_p99_ms.to_string()));
-        custom_details.push((
-            "availability_bps".to_string(),
-            observed_availability_bps.to_string(),
-        ));
+        let mut custom_details = vec![
+            ("runbook_url".to_string(), self.runbook_url.clone()),
+            (
+                "deployment_strategy".to_string(),
+                self.deployment_strategy.clone(),
+            ),
+            ("latency_p99_ms".to_string(), observed_p99_ms.to_string()),
+            (
+                "availability_bps".to_string(),
+                observed_availability_bps.to_string(),
+            ),
+        ];
         for (idx, step) in steps.iter().enumerate() {
             custom_details.push((
                 format!("runbook_step_{}", idx + 1),

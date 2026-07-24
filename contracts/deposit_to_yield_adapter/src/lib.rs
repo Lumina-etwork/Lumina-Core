@@ -1,4 +1,6 @@
 #![no_std]
+#![allow(unused)]
+#![allow(clippy::needless_borrows_for_generic_args)]
 use soroban_sdk::{
     contract, contractevent, contractimpl, contracttype, token, vec, Address, BytesN, Env, IntoVal,
     String, Symbol, Vec, U256,

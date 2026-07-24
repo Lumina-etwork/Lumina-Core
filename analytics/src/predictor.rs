@@ -8,8 +8,8 @@
 
 use chrono::{DateTime, Duration, Utc};
 use ndarray::{Array1, Array2};
+use rand::distributions::Distribution;
 use statrs::distribution::{Normal, StudentsT};
-use statrs::statistics::Distribution;
 use serde::{Deserialize, Serialize};
 
 /// Revenue prediction data point
@@ -36,16 +36,16 @@ pub struct PredictionFactors {
     pub churn_rate: f64,
     pub growth_rate: f64,
     pub volatility: f64,
-    pub stream_count: u32,
+    pub stream_count: i32,
 }
 
 /// Historical data point for analysis
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, sqlx::FromRow)]
 pub struct HistoricalStreamData {
     pub timestamp: DateTime<Utc>,
     pub revenue: f64,
-    pub active_streams: u32,
-    pub cancellations: u32,
+    pub active_streams: i32,
+    pub cancellations: i32,
 }
 
 /// Main prediction engine
@@ -70,8 +70,8 @@ impl RevenuePredictor {
             return 0.0;
         }
 
-        let total_streams: u32 = data.iter().map(|d| d.active_streams).sum();
-        let total_cancellations: u32 = data.iter().map(|d| d.cancellations).sum();
+        let total_streams: i32 = data.iter().map(|d| d.active_streams).sum();
+        let total_cancellations: i32 = data.iter().map(|d| d.cancellations).sum();
 
         if total_streams == 0 {
             return 0.0;
@@ -164,13 +164,14 @@ impl RevenuePredictor {
 
         // Monte Carlo simulation (1000 iterations)
         let simulations = 1000;
+        let mut rng = rand::thread_rng();
         let mut predicted_revenues = Vec::with_capacity(simulations);
 
         for _ in 0..simulations {
             let mut revenue = base_revenue;
             let daily_volatility = volatility / (30.0_f64).sqrt(); // Daily vol from monthly
 
-            for day in 0..period_days {
+            for _day in 0..period_days {
                 // Apply growth and churn
                 let net_growth = growth_rate / 30.0 - churn_rate / 30.0;
                 revenue *= 1.0 + net_growth;
@@ -178,7 +179,7 @@ impl RevenuePredictor {
                 // Add random shock (geometric Brownian motion)
                 let shock = Normal::new(0.0, daily_volatility)
                     .ok()?
-                    .sample();
+                    .sample(&mut rng);
                 revenue *= 1.0 + shock;
 
                 // Ensure non-negative
@@ -246,7 +247,7 @@ mod tests {
                 timestamp: Utc::now() - Duration::days((30 - day) as i64),
                 revenue,
                 active_streams: 10,
-                cancellations: (day % 3) as u32,
+                cancellations: (day % 3) as i32,
             });
             
             // Simulate some growth with noise
