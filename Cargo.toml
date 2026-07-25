@@ -15,6 +15,7 @@ members = [
     "src/consensus",
     "core-engine",
     "src/audit_trail",
+    "social",
     "contracts/grant_contracts",
     "contracts/staking_contract",
     "contracts/deposit_to_yield_adapter",

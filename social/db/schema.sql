@@ -195,3 +195,31 @@ SELECT id, username FROM users WHERE username = 'testcreator';
 INSERT INTO fans (user_id, display_name) 
 SELECT id, username FROM users WHERE username = 'testfan';
 */
+
+-- Dead Letter Queue for failed message processing.
+-- Payloads are represented by a digest instead of plaintext to preserve E2E
+-- confidentiality while still enabling replay correlation and incident triage.
+CREATE TABLE IF NOT EXISTS message_dead_letters (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    message_id UUID REFERENCES messages(id) ON DELETE SET NULL,
+    sender_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    recipient_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    failure_stage VARCHAR(100) NOT NULL,
+    error_class VARCHAR(100) NOT NULL,
+    error_message TEXT NOT NULL,
+    payload_digest TEXT NOT NULL,
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    status VARCHAR(32) NOT NULL DEFAULT 'pending',
+    first_failed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    last_failed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    next_retry_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    resolved_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT message_dead_letters_status_check
+        CHECK (status IN ('pending', 'retrying', 'resolved'))
+);
+
+CREATE INDEX idx_message_dead_letters_status_retry
+    ON message_dead_letters(status, next_retry_at)
+    WHERE status IN ('pending', 'retrying');
+CREATE INDEX idx_message_dead_letters_message ON message_dead_letters(message_id);
+CREATE INDEX idx_message_dead_letters_participants ON message_dead_letters(sender_id, recipient_id);
