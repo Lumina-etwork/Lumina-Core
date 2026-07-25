@@ -7,3 +7,5 @@ pub mod capacity;
 pub mod identity;
 
 pub mod job_scheduler;
+pub mod pool;
+pub mod slo;
