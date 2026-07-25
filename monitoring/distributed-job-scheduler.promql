@@ -1,8 +1,0 @@
-# Alert: SchedulerClaimLatencyHigh
-histogram_quantile(0.99, sum(rate(scheduler_claim_latency_seconds_bucket[5m])) by (le)) > 0.1
-
-# Alert: SchedulerLeaseConflictRateHigh
-sum(rate(scheduler_lease_conflicts_total[5m])) / clamp_min(sum(rate(scheduler_claim_attempts_total[5m])), 1) > 0.05
-
-# Alert: SchedulerQueueDepthHigh
-scheduler_queued_jobs > scheduler_queue_depth_slo
