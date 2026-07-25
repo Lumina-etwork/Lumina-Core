@@ -5,5 +5,6 @@ extern crate alloc;
 pub mod attestation;
 pub mod capacity;
 pub mod identity;
+pub mod net;
 
 pub mod job_scheduler;
