@@ -1,0 +1,27 @@
+{
+  "title": "Lumina Database Migrations",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Migration failures (5m)",
+      "targets": [{ "expr": "sum(increase(lumina_db_migration_failures_total[5m]))" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Migration duration P99",
+      "targets": [{ "expr": "histogram_quantile(0.99, sum(rate(lumina_db_migration_duration_seconds_bucket[10m])) by (le, service))" }]
+    },
+    {
+      "type": "stat",
+      "title": "Checksum drift",
+      "targets": [{ "expr": "sum(lumina_db_migration_checksum_mismatch_total)" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Database availability",
+      "targets": [{ "expr": "avg_over_time(up{job=~\"postgres|database\"}[5m])" }]
+    }
+  ]
+}

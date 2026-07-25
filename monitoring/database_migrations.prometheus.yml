@@ -1,0 +1,28 @@
+# Prometheus alert rules for Lumina database migrations.
+groups:
+  - name: database-migrations
+    rules:
+      - alert: DatabaseMigrationFailure
+        expr: increase(lumina_db_migration_failures_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Database migration failed for {{ $labels.service }}
+          description: Stop rollout, keep the previous green environment serving traffic, and follow docs/runbooks/database_migrations.md.
+      - alert: DatabaseMigrationSlow
+        expr: histogram_quantile(0.99, sum(rate(lumina_db_migration_duration_seconds_bucket[10m])) by (le, service)) > 60
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Database migration P99 duration is high for {{ $labels.service }}
+          description: Review lock waits and query plans before continuing canary expansion.
+      - alert: DatabaseMigrationDrift
+        expr: lumina_db_migration_checksum_mismatch_total > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Applied migration checksum drift detected for {{ $labels.service }}
+          description: Treat as a security event and reconcile schema_migrations with reviewed migration files.
