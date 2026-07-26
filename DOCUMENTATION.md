@@ -313,11 +313,20 @@ Health check endpoint.
 # Create database
 createdb stellar_analytics
 
-# Run migrations
-sqlx migrate run --database-url postgres://localhost/stellar_analytics
+# Validate versioned migrations
+scripts/migrate_database.sh validate analytics
 
-# Or manually apply schema
-psql stellar_analytics < db/schema.sql
+# Apply forward migrations with checksum tracking and advisory locking
+DATABASE_URL=postgres://localhost/stellar_analytics scripts/migrate_database.sh up analytics
+
+# Inspect applied versions
+DATABASE_URL=postgres://localhost/stellar_analytics scripts/migrate_database.sh status analytics
+
+# Roll back to a known target version, after shifting traffic back if needed
+DATABASE_URL=postgres://localhost/stellar_analytics scripts/migrate_database.sh down analytics 0
+
+# Or manually apply the legacy baseline schema
+psql stellar_analytics < analytics/db/schema.sql
 ```
 
 ### Configuration
