@@ -1,12 +1,12 @@
 //! End-to-End Encrypted Messaging System
-//! 
+//!
 //! Implements E2E encryption using ChaCha20-Poly1305 for direct messages
 
-use actix_web::{web, HttpResponse, Error};
+use actix_web::{web, Error, HttpResponse};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgPool;
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 
 // Encryption types
 use chacha20poly1305::{
@@ -16,7 +16,7 @@ use chacha20poly1305::{
 use rand::RngCore;
 
 /// Encrypted message structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Message {
     pub id: Uuid,
     pub sender_id: Uuid,
@@ -37,7 +37,7 @@ pub struct SendMessageRequest {
 }
 
 /// Conversation summary
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Conversation {
     pub id: Uuid,
     pub participant_id: Uuid, // Other participant
@@ -80,20 +80,19 @@ pub async fn send_message(
     req: web::Json<SendMessageRequest>,
 ) -> Result<HttpResponse, Error> {
     // For fan-to-creator messages, verify tier permission
-    let is_creator_recipient = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS (SELECT 1 FROM creators WHERE user_id = $1)",
-    )
-    .bind(req.recipient_id)
-    .fetch_one(&pool***)
-    .await
-    .map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Database error: {}", e))
-    })?;
+    let is_creator_recipient =
+        sqlx::query_scalar::<_, bool>("SELECT EXISTS (SELECT 1 FROM creators WHERE user_id = $1)")
+            .bind(req.recipient_id)
+            .fetch_one(pool.get_ref())
+            .await
+            .map_err(|e| {
+                actix_web::error::ErrorInternalServerError(format!("Database error: {}", e))
+            })?;
 
     if is_creator_recipient {
         // Find which creator this fan is trying to message
         let creator_id = req.recipient_id;
-        
+
         let has_permission = verify_messaging_permission(&pool, *sender_id, creator_id)
             .await
             .map_err(|e| {
@@ -120,14 +119,20 @@ pub async fn send_message(
     .bind(req.recipient_id)
     .bind(&req.encrypted_content)
     .bind(&req.nonce)
-    .fetch_one(&pool***)
+    .fetch_one(pool.get_ref())
     .await
     .map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to send message: {}", e))
     })?;
 
     // Update conversation metadata
-    update_conversation(&pool, *sender_id, req.recipient_id, &message.encrypted_content).await?;
+    update_conversation(
+        &pool,
+        *sender_id,
+        req.recipient_id,
+        &message.encrypted_content,
+    )
+    .await?;
 
     Ok(HttpResponse::Created().json(message))
 }
@@ -161,7 +166,7 @@ pub async fn get_conversations(
         "#,
     )
     .bind(*user_id)
-    .fetch_all(&pool***)
+    .fetch_all(pool.get_ref())
     .await
     .map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to fetch conversations: {}", e))
@@ -199,7 +204,7 @@ pub async fn get_messages(
     .bind(other_user_id)
     .bind(per_page)
     .bind(offset)
-    .fetch_all(&pool***)
+    .fetch_all(pool.get_ref())
     .await
     .map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to fetch messages: {}", e))
@@ -215,7 +220,7 @@ pub async fn get_messages(
     )
     .bind(other_user_id)
     .bind(*user_id)
-    .execute(&pool***)
+    .execute(pool.get_ref())
     .await?;
 
     Ok(HttpResponse::Ok().json(messages))
@@ -282,7 +287,7 @@ pub async fn delete_message(
     )
     .bind(message_id)
     .bind(*user_id)
-    .execute(&pool***)
+    .execute(pool.get_ref())
     .await
     .map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to delete message: {}", e))
@@ -304,7 +309,7 @@ pub async fn mark_message_as_read(
     )
     .bind(message_id)
     .bind(*recipient_id)
-    .execute(&pool***)
+    .execute(pool.get_ref())
     .await
     .map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to mark as read: {}", e))
@@ -314,33 +319,43 @@ pub async fn mark_message_as_read(
 }
 
 /// Utility: Encrypt message content (client should do this, but providing utility)
-pub fn encrypt_message(content: &[u8], key: &[u8]) -> Result<(String, String), Box<dyn std::error::Error>> {
+pub fn encrypt_message(
+    content: &[u8],
+    key: &[u8],
+) -> Result<(String, String), Box<dyn std::error::Error>> {
     let cipher = ChaCha20Poly1305::new_from_slice(key)?;
-    
+
     let mut nonce_bytes = [0u8; 12];
     rand::thread_rng().fill_bytes(&mut nonce_bytes);
     let nonce = Nonce::from_slice(&nonce_bytes);
-    
-    let ciphertext = cipher.encrypt(nonce, Payload {
-        msg: content,
-        aad: &[],
-    })?;
-    
-    Ok((
-        base64::encode(&ciphertext),
-        base64::encode(&nonce_bytes),
-    ))
+
+    let ciphertext = cipher.encrypt(
+        nonce,
+        Payload {
+            msg: content,
+            aad: &[],
+        },
+    )?;
+
+    Ok((base64::encode(&ciphertext), base64::encode(&nonce_bytes)))
 }
 
 /// Utility: Decrypt message content (client should do this)
-pub fn decrypt_message(encrypted: &[u8], nonce: &[u8], key: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+pub fn decrypt_message(
+    encrypted: &[u8],
+    nonce: &[u8],
+    key: &[u8],
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let cipher = ChaCha20Poly1305::new_from_slice(key)?;
     let nonce = Nonce::from_slice(nonce);
-    
-    let plaintext = cipher.decrypt(nonce, Payload {
-        msg: encrypted,
-        aad: &[],
-    })?;
-    
+
+    let plaintext = cipher.decrypt(
+        nonce,
+        Payload {
+            msg: encrypted,
+            aad: &[],
+        },
+    )?;
+
     Ok(plaintext)
 }

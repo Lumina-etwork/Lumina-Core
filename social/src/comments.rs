@@ -1,16 +1,16 @@
 //! Comment System API
-//! 
+//!
 //! Implements exclusive threaded comments gated for fans with active subscriptions
 
-use actix_web::{web, HttpResponse, Error};
+use actix_web::{web, Error, HttpResponse};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgPool;
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 use validator::Validate;
 
 /// Threaded comment structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Comment {
     pub id: Uuid,
     pub creator_id: Uuid,
@@ -114,7 +114,7 @@ pub async fn create_comment(
     .bind(*fan_id)
     .bind(req.parent_comment_id)
     .bind(&req.content)
-    .fetch_one(&pool***)
+    .fetch_one(pool.get_ref())
     .await
     .map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to create comment: {}", e))
@@ -148,7 +148,7 @@ pub async fn get_comments(
     .bind(creator_id)
     .bind(per_page)
     .bind(offset)
-    .fetch_all(&pool***)
+    .fetch_all(pool.get_ref())
     .await
     .map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to fetch comments: {}", e))
@@ -159,7 +159,7 @@ pub async fn get_comments(
         "SELECT COUNT(*) FROM comments WHERE creator_id = $1 AND parent_comment_id IS NULL",
     )
     .bind(creator_id)
-    .fetch_one(&pool***)
+    .fetch_one(pool.get_ref())
     .await
     .unwrap_or(0);
 
@@ -192,7 +192,7 @@ async fn fetch_replies(pool: &PgPool, parent_id: Uuid) -> Result<Vec<Comment>, E
         "#,
     )
     .bind(parent_id)
-    .fetch_all(&pool***)
+    .fetch_all(pool.get_ref())
     .await
     .map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to fetch replies: {}", e))
@@ -216,11 +216,9 @@ pub async fn update_comment(
     )
     .bind(comment_id)
     .bind(*fan_id)
-    .fetch_one(&pool***)
+    .fetch_one(pool.get_ref())
     .await
-    .map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Database error: {}", e))
-    })?;
+    .map_err(|e| actix_web::error::ErrorInternalServerError(format!("Database error: {}", e)))?;
 
     if !is_owner {
         return Ok(HttpResponse::Forbidden().json(serde_json::json!({
@@ -240,7 +238,7 @@ pub async fn update_comment(
     )
     .bind(&req.content)
     .bind(comment_id)
-    .fetch_one(&pool***)
+    .fetch_one(pool.get_ref())
     .await
     .map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to update comment: {}", e))
@@ -263,7 +261,7 @@ pub async fn delete_comment(
     )
     .bind(comment_id)
     .bind(*fan_id)
-    .execute(&pool***)
+    .execute(pool.get_ref())
     .await
     .map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to delete comment: {}", e))
@@ -286,22 +284,20 @@ pub async fn like_comment(
     )
     .bind(comment_id)
     .bind(*fan_id)
-    .execute(&pool***)
+    .execute(pool.get_ref())
     .await
     .map_err(|e| {
         actix_web::error::ErrorInternalServerError(format!("Failed to like comment: {}", e))
     })?;
 
     // Update like count
-    let like_count: i32 = sqlx::query_scalar(
-        "SELECT like_count FROM comments WHERE id = $1",
-    )
-    .bind(comment_id)
-    .fetch_one(&pool***)
-    .await
-    .map_err(|e| {
-        actix_web::error::ErrorInternalServerError(format!("Failed to get like count: {}", e))
-    })?;
+    let like_count: i32 = sqlx::query_scalar("SELECT like_count FROM comments WHERE id = $1")
+        .bind(comment_id)
+        .fetch_one(pool.get_ref())
+        .await
+        .map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!("Failed to get like count: {}", e))
+        })?;
 
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "comment_id": comment_id,
@@ -318,5 +314,9 @@ pub struct PaginationParams {
     pub per_page: i64,
 }
 
-fn default_page() -> i64 { 1 }
-fn default_per_page() -> i64 { 20 }
+fn default_page() -> i64 {
+    1
+}
+fn default_per_page() -> i64 {
+    20
+}

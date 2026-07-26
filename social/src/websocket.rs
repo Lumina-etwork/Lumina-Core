@@ -1,13 +1,13 @@
 //! WebSocket Server for Real-time Messaging
-//! 
+//!
 //! Implements WebSocket connections for instant message delivery
 
 use actix::{prelude::*, Actor, StreamHandler};
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
+use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
-use serde::{Deserialize, Serialize};
 
 /// How often heartbeat pings are sent
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
@@ -26,9 +26,7 @@ pub enum WsMessage {
         nonce: String,
     },
     /// Mark messages as read
-    MarkRead {
-        message_ids: Vec<Uuid>,
-    },
+    MarkRead { message_ids: Vec<Uuid> },
     /// Typing indicator
     Typing {
         conversation_id: Uuid,
@@ -40,9 +38,7 @@ pub enum WsMessage {
         status: String,
     },
     /// Error message
-    Error {
-        message: String,
-    },
+    Error { message: String },
 }
 
 /// WebSocket session for each user
@@ -62,7 +58,7 @@ impl Actor for WsSession {
 
     fn started(&mut self, ctx: &mut Self::Context) {
         self.hb = Instant::now();
-        
+
         // Start heartbeat
         ctx.run_interval(HEARTBEAT_INTERVAL, |act, ctx| {
             // Check client still responds
@@ -130,11 +126,7 @@ impl WsSession {
     }
 
     /// Handle incoming WebSocket message
-    fn handle_ws_message(
-        &mut self,
-        msg: WsMessage,
-        ctx: &mut ws::WebsocketContext<Self>,
-    ) {
+    fn handle_ws_message(&mut self, msg: WsMessage, ctx: &mut ws::WebsocketContext<Self>) {
         match msg {
             WsMessage::SendMessage {
                 recipient_id,
@@ -160,8 +152,12 @@ impl WsSession {
                 // This would require an Actor address registry
             }
             WsMessage::MarkRead { message_ids } => {
-                println!("User {} marked {} messages as read", self.user_id, message_ids.len());
-                
+                println!(
+                    "User {} marked {} messages as read",
+                    self.user_id,
+                    message_ids.len()
+                );
+
                 // Update database and notify sender
                 let ack = WsMessage::Ack {
                     message_id: None,
@@ -180,7 +176,7 @@ impl WsSession {
                     if is_typing { "" } else { "not " },
                     conversation_id
                 );
-                
+
                 // TODO: Forward to other participant
             }
             _ => {
@@ -232,13 +228,21 @@ impl MessageBroadcaster {
     /// Register a session
     pub fn register(&mut self, user_id: Uuid, addr: Addr<WsSession>) {
         self.sessions.insert(user_id, addr);
-        println!("User {} connected. Total sessions: {}", user_id, self.sessions.len());
+        println!(
+            "User {} connected. Total sessions: {}",
+            user_id,
+            self.sessions.len()
+        );
     }
 
     /// Unregister a session
     pub fn unregister(&mut self, user_id: Uuid) {
         self.sessions.remove(&user_id);
-        println!("User {} disconnected. Total sessions: {}", user_id, self.sessions.len());
+        println!(
+            "User {} disconnected. Total sessions: {}",
+            user_id,
+            self.sessions.len()
+        );
     }
 
     /// Send message to specific user
