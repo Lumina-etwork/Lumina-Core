@@ -116,3 +116,4 @@ mod tests {
         bm.is_free(ShardId(100));
     }
 }
+pub enum ShardStatus { Active, Quiescing, Draining, Migrated } 
