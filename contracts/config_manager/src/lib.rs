@@ -1,8 +1,7 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, panic_with_error, symbol_short,
-    Address, Env, String, Vec,
+    contract, contractimpl, panic_with_error, symbol_short, Address, Env, String, Vec,
 };
 
 mod errors;
@@ -62,6 +61,7 @@ impl ConfigManager {
 
         set_version(&e, new_version);
 
+        #[allow(deprecated)] // reason: migrating to #[contractevent] is behavior-risky
         e.events().publish(
             (CONFIG_SYMBOL, symbol_short!("updated")),
             (key, value, new_version, now),
@@ -93,13 +93,12 @@ impl ConfigManager {
         let current_version = get_version(&e);
         let new_version = current_version + 1;
 
-
-
         remove_config_value(&e, &key);
         remove_config_schema(&e, &key);
         remove_key_from_index(&e, &key);
         set_version(&e, new_version);
 
+        #[allow(deprecated)] // reason: migrating to #[contractevent] is behavior-risky
         e.events().publish(
             (CONFIG_SYMBOL, symbol_short!("deleted")),
             (key, new_version),
@@ -133,11 +132,7 @@ impl ConfigManager {
         get_version(&e)
     }
 
-    pub fn validate_config_value(
-        e: Env,
-        key: String,
-        value: String,
-    ) -> bool {
+    pub fn validate_config_value(e: Env, key: String, value: String) -> bool {
         let schema = get_config_schema(&e, &key);
 
         let u64_type = String::from_str(&e, "u64");
@@ -148,19 +143,19 @@ impl ConfigManager {
             Some(schema_str) => {
                 if schema_str == u64_type {
                     let v = value.to_bytes();
-                    if v.len() == 0 {
+                    if v.is_empty() {
                         return false;
                     }
                     for i in 0..v.len() {
                         let byte = v.get(i).unwrap();
-                        if byte < 48 || byte > 57 {
+                        if !(48..=57).contains(&byte) {
                             return false;
                         }
                     }
                     true
                 } else if schema_str == i128_type {
                     let v = value.to_bytes();
-                    if v.len() == 0 {
+                    if v.is_empty() {
                         return false;
                     }
                     for i in 0..v.len() {
@@ -168,13 +163,13 @@ impl ConfigManager {
                         if i == 0 && byte == 45 {
                             continue;
                         }
-                        if byte < 48 || byte > 57 {
+                        if !(48..=57).contains(&byte) {
                             return false;
                         }
                     }
                     true
                 } else if schema_str == bool_type {
-                    let v = value.to_bytes();
+                    let _v = value.to_bytes();
                     let t = String::from_str(&e, "true");
                     let f = String::from_str(&e, "false");
                     let one = String::from_str(&e, "1");
@@ -237,9 +232,10 @@ impl ConfigManager {
 
         set_version(&e, last_version);
 
+        #[allow(deprecated)] // reason: migrating to #[contractevent] is behavior-risky
         e.events().publish(
             (CONFIG_SYMBOL, symbol_short!("imported")),
-            (count as u32, last_version),
+            (count, last_version),
         );
 
         last_version

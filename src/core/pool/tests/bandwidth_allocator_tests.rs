@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-    use std::thread;
     use crate::core::pool::bandwidth_allocator::{BandwidthAllocator, TOTAL_POOL_BANDWIDTH};
     use crate::core::pool::shard_manager::TenantId;
+    use std::sync::Arc;
+    use std::thread;
 
     #[test]
     fn test_concurrent_allocation() {
@@ -16,7 +16,7 @@ mod tests {
             let tenant_id = TenantId(i as u64);
             let handle = thread::spawn(move || {
                 // Request random bandwidth between 1-100 Mbps (using pseudo-random for determinism or simple calculation)
-                let requested = (i % 100) + 1; 
+                let requested = (i % 100) + 1;
                 let _ = allocator_clone.allocate_bandwidth(tenant_id, requested);
             });
             handles.push(handle);
@@ -27,6 +27,11 @@ mod tests {
         }
 
         let total_allocated = allocator.get_active_allocations();
-        assert!(total_allocated <= TOTAL_POOL_BANDWIDTH, "Total allocated {} exceeds pool bandwidth {}", total_allocated, TOTAL_POOL_BANDWIDTH);
+        assert!(
+            total_allocated <= TOTAL_POOL_BANDWIDTH,
+            "Total allocated {} exceeds pool bandwidth {}",
+            total_allocated,
+            TOTAL_POOL_BANDWIDTH
+        );
     }
 }

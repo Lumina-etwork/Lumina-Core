@@ -11,10 +11,22 @@ pub const CONTROL_MESSAGE_OVERHEAD_LIMIT: f64 = 0.05;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum WindowEvent {
-    WindowUpdated { tenant_id: String, new_window: u64 },
-    WindowForcedOpen { tenant_id: String, previous_window: u64 },
-    ProbeScheduled { tenant_id: String, interval_ms: u64 },
-    ZeroWindowAckSuppressed { tenant_id: String, consecutive_zero: u8 },
+    WindowUpdated {
+        tenant_id: String,
+        new_window: u64,
+    },
+    WindowForcedOpen {
+        tenant_id: String,
+        previous_window: u64,
+    },
+    ProbeScheduled {
+        tenant_id: String,
+        interval_ms: u64,
+    },
+    ZeroWindowAckSuppressed {
+        tenant_id: String,
+        consecutive_zero: u8,
+    },
 }
 
 #[derive(Clone, Debug)]

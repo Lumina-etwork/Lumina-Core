@@ -1,6 +1,4 @@
-use crate::pool::congestion::types::{
-    WindowEvent, CONTROL_MESSAGE_OVERHEAD_LIMIT,
-};
+use crate::pool::congestion::types::{WindowEvent, CONTROL_MESSAGE_OVERHEAD_LIMIT};
 use std::collections::HashMap;
 
 pub struct BackpressureSender {

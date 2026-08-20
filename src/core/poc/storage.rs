@@ -42,7 +42,13 @@ pub fn set_poc_record(env: &Env, record: &PocRecord) {
     env.storage().persistent().set(&key, record);
 }
 
-pub fn check_and_set_lock(env: &Env, node_id: String, peer_id: String, validator: Address, ledger_seq: u32) -> bool {
+pub fn check_and_set_lock(
+    env: &Env,
+    node_id: String,
+    peer_id: String,
+    validator: Address,
+    ledger_seq: u32,
+) -> bool {
     let key = DataKey::PocLock(node_id, peer_id, validator, ledger_seq);
     if env.storage().temporary().has(&key) {
         return false;
