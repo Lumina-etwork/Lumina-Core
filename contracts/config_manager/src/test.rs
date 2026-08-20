@@ -1,12 +1,9 @@
-#![cfg(test)]
+#![allow(deprecated)] // reason: soroban_sdk update requires macro rewrite which is behavior-risky
 
 extern crate std;
 
 use crate::{ConfigManager, ConfigManagerClient};
-use soroban_sdk::{
-    testutils::{Address as _, Ledger},
-    vec, Address, Env, String, Vec,
-};
+use soroban_sdk::{testutils::Address as _, vec, Address, Env, String};
 
 fn setup_test() -> (Env, Address, Address) {
     let env = Env::default();
@@ -216,30 +213,15 @@ fn test_batch_import() {
     let (env, contract_id, admin) = setup_test();
     let client = ConfigManagerClient::new(&env, &contract_id);
 
-    let keys = vec![
-        &env,
-        s(&env, "k1"),
-        s(&env, "k2"),
-        s(&env, "k3"),
-    ];
-    let values = vec![
-        &env,
-        s(&env, "v1"),
-        s(&env, "v2"),
-        s(&env, "v3"),
-    ];
+    let keys = vec![&env, s(&env, "k1"), s(&env, "k2"), s(&env, "k3")];
+    let values = vec![&env, s(&env, "v1"), s(&env, "v2"), s(&env, "v3")];
     let schema_types = vec![
         &env,
         s(&env, "string"),
         s(&env, "string"),
         s(&env, "string"),
     ];
-    let descriptions = vec![
-        &env,
-        s(&env, "desc1"),
-        s(&env, "desc2"),
-        s(&env, "desc3"),
-    ];
+    let descriptions = vec![&env, s(&env, "desc1"), s(&env, "desc2"), s(&env, "desc3")];
 
     let version = client.batch_import_configs(&admin, &keys, &values, &schema_types, &descriptions);
     assert_eq!(client.get_config_count(), 3);

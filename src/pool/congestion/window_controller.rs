@@ -1,5 +1,5 @@
 use crate::pool::congestion::types::{
-    WindowEvent, WindowState, WINDOW_MIN, WINDOW_SUSPENDED, MAX_ZERO_WINDOW_HEARTBEATS,
+    WindowEvent, WindowState, MAX_ZERO_WINDOW_HEARTBEATS, WINDOW_MIN, WINDOW_SUSPENDED,
 };
 use std::collections::HashMap;
 
@@ -17,21 +17,15 @@ impl WindowController {
     }
 
     pub fn register_tenant(&mut self, tenant_id: &str, initial_window: u64) {
-        self.tenants.insert(
-            tenant_id.to_string(),
-            WindowState::new(initial_window),
-        );
+        self.tenants
+            .insert(tenant_id.to_string(), WindowState::new(initial_window));
     }
 
     pub fn get_window(&self, tenant_id: &str) -> Option<u64> {
         self.tenants.get(tenant_id).map(|s| s.current_window)
     }
 
-    pub fn advertise_window(
-        &mut self,
-        tenant_id: &str,
-        desired_window: u64,
-    ) -> Vec<WindowEvent> {
+    pub fn advertise_window(&mut self, tenant_id: &str, desired_window: u64) -> Vec<WindowEvent> {
         let mut events = Vec::new();
         let state = self.tenants.get_mut(tenant_id);
 
@@ -95,7 +89,10 @@ mod tests {
             }
         }
 
-        assert!(forced, "Forced open should trigger within 6 zero-window heartbeats");
+        assert!(
+            forced,
+            "Forced open should trigger within 6 zero-window heartbeats"
+        );
         assert_eq!(wc.forced_open_count(), 1);
     }
 

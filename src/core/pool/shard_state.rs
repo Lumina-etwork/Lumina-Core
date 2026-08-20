@@ -25,9 +25,19 @@ pub struct ShardBitmask {
 impl ShardBitmask {
     /// Creates a bitmask with all `TOTAL_SHARDS` bits set (all free).
     pub fn all_free() -> Self {
-        let lo = if TOTAL_SHARDS >= 64 { u64::MAX } else { (1u64 << TOTAL_SHARDS) - 1 };
+        let lo = if TOTAL_SHARDS >= 64 {
+            u64::MAX
+        } else {
+            (1u64 << TOTAL_SHARDS) - 1
+        };
         let hi_bits = TOTAL_SHARDS.saturating_sub(64);
-        let hi = if hi_bits == 0 { 0 } else if hi_bits >= 64 { u64::MAX } else { (1u64 << hi_bits) - 1 };
+        let hi = if hi_bits == 0 {
+            0
+        } else if hi_bits >= 64 {
+            u64::MAX
+        } else {
+            (1u64 << hi_bits) - 1
+        };
         Self {
             words: [AtomicU64::new(lo), AtomicU64::new(hi)],
         }
@@ -72,7 +82,13 @@ impl ShardBitmask {
     pub fn free_count(&self) -> usize {
         let lo = self.words[0].load(Ordering::Acquire).count_ones() as usize;
         let hi_bits = TOTAL_SHARDS.saturating_sub(64);
-        let hi_mask = if hi_bits == 0 { 0 } else if hi_bits >= 64 { u64::MAX } else { (1u64 << hi_bits) - 1 };
+        let hi_mask = if hi_bits == 0 {
+            0
+        } else if hi_bits >= 64 {
+            u64::MAX
+        } else {
+            (1u64 << hi_bits) - 1
+        };
         let hi = (self.words[1].load(Ordering::Acquire) & hi_mask).count_ones() as usize;
         lo + hi
     }
@@ -116,4 +132,9 @@ mod tests {
         bm.is_free(ShardId(100));
     }
 }
-pub enum ShardStatus { Active, Quiescing, Draining, Migrated } 
+pub enum ShardStatus {
+    Active,
+    Quiescing,
+    Draining,
+    Migrated,
+}
