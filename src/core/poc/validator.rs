@@ -1,5 +1,8 @@
+use super::storage::{
+    check_and_set_lock, get_poc_record, set_poc_record, ValidatorAttestation, MAX_RTT,
+    MAX_VALIDATORS_PER_PEER,
+};
 use soroban_sdk::{Address, Env, String};
-use super::storage::{get_poc_record, set_poc_record, check_and_set_lock, ValidatorAttestation, MAX_RTT, MAX_VALIDATORS_PER_PEER};
 
 pub fn validate_poc(
     env: &Env,
@@ -17,12 +20,18 @@ pub fn validate_poc(
     }
 
     let ledger_seq = env.ledger().sequence();
-    if !check_and_set_lock(env, node_id.clone(), peer_id.clone(), validator.clone(), ledger_seq) {
+    if !check_and_set_lock(
+        env,
+        node_id.clone(),
+        peer_id.clone(),
+        validator.clone(),
+        ledger_seq,
+    ) {
         panic!("validator already attested in this ledger");
     }
 
     let mut record = get_poc_record(env, node_id, peer_id);
-    
+
     // dedup check per validator
     for a in record.attestations.iter() {
         if a.validator == validator {
@@ -40,7 +49,7 @@ pub fn validate_poc(
         bandwidth_kbps,
         timestamp,
     };
-    
+
     record.attestations.push_back(attestation);
 
     set_poc_record(env, &record);

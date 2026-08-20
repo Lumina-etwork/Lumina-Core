@@ -11,21 +11,10 @@ proptest = "1.0"
 
 [workspace]
 members = [
-    "src/consensus",
-    "core-engine",
-    "src/audit_trail",
-    "contracts/grant_contracts",
-    "contracts/staking_contract",
-    "contracts/deposit_to_yield_adapter",
-    "contracts/insurance_treasury",
     "contracts/config_manager",
 ]
 
 default-members = [
-    "contracts/grant_contracts",
-    "contracts/staking_contract",
-    "contracts/deposit_to_yield_adapter",
-    "contracts/insurance_treasury",
     "contracts/config_manager",
 ]
 

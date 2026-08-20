@@ -1,6 +1,6 @@
+use crate::core::pool::shard_manager::TenantId;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use crate::core::pool::shard_manager::TenantId;
 
 #[derive(Debug, Clone)]
 pub struct AllocationStore {
@@ -23,7 +23,7 @@ impl AllocationStore {
         let mut lock = self.allocations.write().unwrap();
         lock.insert(tenant_id, bandwidth);
     }
-    
+
     pub fn get_allocation(&self, tenant_id: &TenantId) -> u64 {
         let lock = self.allocations.read().unwrap();
         lock.get(tenant_id).copied().unwrap_or(0)

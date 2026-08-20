@@ -70,7 +70,9 @@ pub fn remove_config_schema(e: &Env, key: &String) {
 }
 
 pub fn set_version(e: &Env, version: u32) {
-    e.storage().instance().set(&DataKey::ConfigVersion, &version);
+    e.storage()
+        .instance()
+        .set(&DataKey::ConfigVersion, &version);
 }
 
 pub fn get_version(e: &Env) -> u32 {
@@ -81,9 +83,7 @@ pub fn get_version(e: &Env) -> u32 {
 }
 
 pub fn set_initialized(e: &Env) {
-    e.storage()
-        .instance()
-        .set(&DataKey::IsInitialized, &true);
+    e.storage().instance().set(&DataKey::IsInitialized, &true);
 }
 
 pub fn is_initialized(e: &Env) -> bool {
@@ -94,11 +94,7 @@ pub fn is_initialized(e: &Env) -> bool {
 }
 
 pub fn add_key_to_index(e: &Env, key: &String) {
-    let mut keys: Vec<String> = e
-        .storage()
-        .instance()
-        .get(&ALL_KEYS)
-        .unwrap_or(Vec::new(e));
+    let mut keys: Vec<String> = e.storage().instance().get(&ALL_KEYS).unwrap_or(Vec::new(e));
     if !keys.contains(key) {
         keys.push_back(key.clone());
         e.storage().instance().set(&ALL_KEYS, &keys);
@@ -106,11 +102,7 @@ pub fn add_key_to_index(e: &Env, key: &String) {
 }
 
 pub fn remove_key_from_index(e: &Env, key: &String) {
-    let keys: Vec<String> = e
-        .storage()
-        .instance()
-        .get(&ALL_KEYS)
-        .unwrap_or(Vec::new(e));
+    let keys: Vec<String> = e.storage().instance().get(&ALL_KEYS).unwrap_or(Vec::new(e));
     let mut filtered: Vec<String> = Vec::new(e);
     for i in 0..keys.len() {
         let k = keys.get(i).unwrap();
@@ -122,8 +114,5 @@ pub fn remove_key_from_index(e: &Env, key: &String) {
 }
 
 pub fn get_all_config_keys(e: &Env) -> Vec<String> {
-    e.storage()
-        .instance()
-        .get(&ALL_KEYS)
-        .unwrap_or(Vec::new(e))
+    e.storage().instance().get(&ALL_KEYS).unwrap_or(Vec::new(e))
 }

@@ -37,8 +37,8 @@ impl ProbeScheduler {
         state.consecutive_probes += 1;
 
         let interval = state.current_interval_ms;
-        state.current_interval_ms = (state.current_interval_ms * 2)
-            .min(ZERO_WINDOW_PROBE_MAX_INTERVAL.as_millis() as u64);
+        state.current_interval_ms =
+            (state.current_interval_ms * 2).min(ZERO_WINDOW_PROBE_MAX_INTERVAL.as_millis() as u64);
 
         self.probe_backoff_interval_ms = state.current_interval_ms;
 

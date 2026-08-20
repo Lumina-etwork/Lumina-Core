@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use super::shard_state::{ShardId, TOTAL_SHARDS, MAX_TENANTS, SHARD_CAPACITY};
+use super::shard_state::{ShardId, MAX_TENANTS, SHARD_CAPACITY, TOTAL_SHARDS};
 
 /// Unique tenant identifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -90,9 +90,7 @@ impl ShardManager {
     pub fn reclaim_shard(&self, tenant: TenantId) -> Result<ShardId, ShardError> {
         let mut state = self.state.lock().unwrap();
 
-        if state.tenant_shards.len() >= MAX_TENANTS
-            && !state.tenant_shards.contains_key(&tenant)
-        {
+        if state.tenant_shards.len() >= MAX_TENANTS && !state.tenant_shards.contains_key(&tenant) {
             return Err(ShardError::TenantLimitReached);
         }
 
