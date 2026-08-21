@@ -15,7 +15,7 @@ fn test_concurrent_validator_submission() {
     let node_id = String::from_str(&env, "node1");
     let peer_id = String::from_str(&env, "peer1");
 
-    env.ledger().with_mut(|l| l.sequence = 100);
+    env.ledger().with_mut(|l| l.sequence_number = 100);
 
     for i in 1..=5 {
         let validator = Address::generate(&env);
