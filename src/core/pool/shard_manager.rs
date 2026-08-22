@@ -1,10 +1,11 @@
-use std::collections::HashMap;
-use std::sync::Mutex;
+use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
+use spin::Mutex;
 
 use super::shard_state::{ShardId, MAX_TENANTS, SHARD_CAPACITY, TOTAL_SHARDS};
 
 /// Unique tenant identifier.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TenantId(pub u64);
 
 /// Error conditions for shard operations.
@@ -34,7 +35,7 @@ struct ShardManagerState {
     /// Maps each assigned shard to its owning tenant.
     shard_owner: [Option<TenantId>; TOTAL_SHARDS],
     /// Maps tenant to its assigned shards.
-    tenant_shards: HashMap<TenantId, Vec<ShardId>>,
+    tenant_shards: BTreeMap<TenantId, Vec<ShardId>>,
 }
 
 impl ShardManager {
@@ -44,14 +45,14 @@ impl ShardManager {
             state: Mutex::new(ShardManagerState {
                 free_shards,
                 shard_owner: [None; TOTAL_SHARDS],
-                tenant_shards: HashMap::new(),
+                tenant_shards: BTreeMap::new(),
             }),
         }
     }
 
     /// Returns the number of currently free shards.
     pub fn free_count(&self) -> usize {
-        self.state.lock().unwrap().free_shards.len()
+        self.state.lock().free_shards.len()
     }
 
     /// Returns the shard capacity (connections per shard).
@@ -63,7 +64,7 @@ impl ShardManager {
     ///
     /// Verifies the shard invariant after mutation.
     pub fn release_shard(&self, tenant: TenantId, shard: ShardId) -> Result<(), ShardError> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
 
         match state.shard_owner[shard.as_usize()] {
             Some(owner) if owner == tenant => {}
@@ -88,7 +89,7 @@ impl ShardManager {
     ///
     /// Verifies the shard invariant after mutation.
     pub fn reclaim_shard(&self, tenant: TenantId) -> Result<ShardId, ShardError> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
 
         if state.tenant_shards.len() >= MAX_TENANTS && !state.tenant_shards.contains_key(&tenant) {
             return Err(ShardError::TenantLimitReached);
@@ -105,7 +106,7 @@ impl ShardManager {
 
     /// Returns a snapshot of shard IDs assigned to a tenant.
     pub fn tenant_shard_ids(&self, tenant: TenantId) -> Vec<ShardId> {
-        let state = self.state.lock().unwrap();
+        let state = self.state.lock();
         state
             .tenant_shards
             .get(&tenant)
@@ -115,7 +116,7 @@ impl ShardManager {
 
     /// Explicitly runs the invariant check. Useful for external callers.
     pub fn verify_invariant(&self) -> Result<(), ShardError> {
-        let state = self.state.lock().unwrap();
+        let state = self.state.lock();
         verify_shard_invariant(&state)
     }
 }
@@ -187,5 +188,27 @@ mod tests {
             mgr.reclaim_shard(TenantId(MAX_TENANTS as u64)),
             Err(ShardError::TenantLimitReached)
         );
+    }
+    #[test]
+    fn test_tenant_shard_ids() {
+        let mgr = ShardManager::new();
+        let t1 = TenantId(1);
+        let t2 = TenantId(2);
+        
+        let s1 = mgr.reclaim_shard(t1).unwrap();
+        let s2 = mgr.reclaim_shard(t1).unwrap();
+        let s3 = mgr.reclaim_shard(t2).unwrap();
+        
+        let t1_shards = mgr.tenant_shard_ids(t1);
+        assert_eq!(t1_shards.len(), 2);
+        assert!(t1_shards.contains(&s1));
+        assert!(t1_shards.contains(&s2));
+        
+        let t2_shards = mgr.tenant_shard_ids(t2);
+        assert_eq!(t2_shards.len(), 1);
+        assert!(t2_shards.contains(&s3));
+        
+        let t3_shards = mgr.tenant_shard_ids(TenantId(3));
+        assert!(t3_shards.is_empty());
     }
 }

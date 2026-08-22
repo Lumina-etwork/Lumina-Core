@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicU64, Ordering};
+use core::sync::atomic::{AtomicU64, Ordering};
 
 pub const TOTAL_SHARDS: usize = 100;
 pub const SHARD_CAPACITY: usize = 10;

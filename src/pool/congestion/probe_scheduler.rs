@@ -1,10 +1,11 @@
 use crate::pool::congestion::types::{
     WindowEvent, ZERO_WINDOW_PROBE_INITIAL_INTERVAL, ZERO_WINDOW_PROBE_MAX_INTERVAL,
 };
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
+use alloc::string::{String, ToString};
 
 pub struct ProbeScheduler {
-    tenants: HashMap<String, ProbeState>,
+    tenants: BTreeMap<String, ProbeState>,
     pub probe_backoff_interval_ms: u64,
 }
 
@@ -16,7 +17,7 @@ struct ProbeState {
 impl ProbeScheduler {
     pub fn new() -> Self {
         Self {
-            tenants: HashMap::new(),
+            tenants: BTreeMap::new(),
             probe_backoff_interval_ms: ZERO_WINDOW_PROBE_INITIAL_INTERVAL.as_millis() as u64,
         }
     }
@@ -91,6 +92,12 @@ mod tests {
         ps.on_non_zero_window_ack("tenant-b");
         let interval = ps.get_probe_interval("tenant-b").unwrap();
         assert_eq!(interval, 5000);
+    }
+
+    #[test]
+    fn test_unknown_tenant_schedule_probe() {
+        let mut ps = ProbeScheduler::new();
+        assert_eq!(ps.schedule_probe("unknown"), None);
     }
 
     fn extract_interval(event: &WindowEvent) -> u64 {

@@ -1,5 +1,5 @@
+use alloc::string::String;
 use core::time::Duration;
-
 pub const WINDOW_MIN: u64 = 1;
 pub const WINDOW_MAX: u64 = 65535;
 pub const WINDOW_SUSPENDED: u64 = 0;

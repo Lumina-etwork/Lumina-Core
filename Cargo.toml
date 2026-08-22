@@ -4,8 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+soroban-sdk.workspace = true
+spin = "0.9.8"
 
 [dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
 
 [workspace]
 members = [
