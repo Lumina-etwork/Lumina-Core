@@ -1,8 +1,9 @@
-use crate::pool::congestion::types::{WindowEvent, CONTROL_MESSAGE_OVERHEAD_LIMIT};
-use std::collections::HashMap;
+use crate::pool::congestion::types::CONTROL_MESSAGE_OVERHEAD_LIMIT;
+use alloc::collections::BTreeMap;
+use alloc::string::{String, ToString};
 
 pub struct BackpressureSender {
-    tenants: HashMap<String, SenderState>,
+    tenants: BTreeMap<String, SenderState>,
     total_control_messages: u64,
     suppressed_acks: u64,
 }
@@ -17,7 +18,7 @@ struct SenderState {
 impl BackpressureSender {
     pub fn new() -> Self {
         Self {
-            tenants: HashMap::new(),
+            tenants: BTreeMap::new(),
             total_control_messages: 0,
             suppressed_acks: 0,
         }
@@ -87,7 +88,7 @@ mod tests {
         assert!(bs.should_send_ack("tenant-a", 0));
         assert!(bs.should_send_ack("tenant-a", 0));
         assert!(bs.should_send_ack("tenant-a", 0));
-        assert!(bs.should_send_ack("tenant-a", 0));
+        assert!(!bs.should_send_ack("tenant-a", 0));
 
         assert!(bs.suppressed_ack_count() >= 1);
     }

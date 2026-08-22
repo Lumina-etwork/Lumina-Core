@@ -1,6 +1,7 @@
 use crate::core::pool::allocation_store::AllocationStore;
 use crate::core::pool::shard_manager::TenantId;
-use std::sync::{Arc, Mutex};
+use alloc::sync::Arc;
+use spin::Mutex;
 
 pub const TOTAL_POOL_BANDWIDTH: u64 = 1000;
 pub const ALLOCATION_GRANULARITY: u64 = 1;
@@ -26,7 +27,7 @@ impl BandwidthAllocator {
         tenant_id: TenantId,
         requested: u64,
     ) -> Result<(), &'static str> {
-        let _lock = self.pool_alloc_lock.lock().unwrap();
+        let _lock = self.pool_alloc_lock.lock();
 
         let current_allocation = self.store.get_allocation(&tenant_id);
         let active_allocations = self.store.get_active_allocations();

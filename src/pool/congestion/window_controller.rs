@@ -1,17 +1,19 @@
 use crate::pool::congestion::types::{
     WindowEvent, WindowState, MAX_ZERO_WINDOW_HEARTBEATS, WINDOW_MIN, WINDOW_SUSPENDED,
 };
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 pub struct WindowController {
-    tenants: HashMap<String, WindowState>,
+    tenants: BTreeMap<String, WindowState>,
     pub zero_window_stalls_prevented: u64,
 }
 
 impl WindowController {
     pub fn new() -> Self {
         Self {
-            tenants: HashMap::new(),
+            tenants: BTreeMap::new(),
             zero_window_stalls_prevented: 0,
         }
     }
@@ -80,12 +82,15 @@ mod tests {
         wc.register_tenant("tenant-a", 65535);
 
         let mut forced = false;
-        for i in 1..=10 {
+        for _ in 1..=10 {
             let events = wc.advertise_window("tenant-a", 0);
             for ev in &events {
                 if let WindowEvent::WindowForcedOpen { .. } = ev {
                     forced = true;
                 }
+            }
+            if forced {
+                break;
             }
         }
 
