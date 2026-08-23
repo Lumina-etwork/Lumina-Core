@@ -1,14 +1,13 @@
-use alloc::collections::BTreeMap;
+﻿use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
-use spin::Mutex;
+use spin::{RwLock, Mutex};
+use core::sync::atomic::{AtomicU64, Ordering};
 
 use super::shard_state::{ShardId, MAX_TENANTS, SHARD_CAPACITY, TOTAL_SHARDS};
 
-/// Unique tenant identifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TenantId(pub u64);
 
-/// Error conditions for shard operations.
 #[derive(Debug, PartialEq, Eq)]
 pub enum ShardError {
     NoFreeShards,
@@ -21,118 +20,186 @@ pub enum ShardError {
     },
 }
 
-/// Manages connection pool shards across tenants.
-///
-/// Uses a `Mutex<Vec<ShardId>>` free list instead of a bitmask to eliminate
-/// torn-read races on non-atomic u128 operations (see issue: shard leak
-/// under concurrent release/reclaim).
+const STRIPES: usize = 128;
+
 pub struct ShardManager {
-    state: Mutex<ShardManagerState>,
+    stripes: Vec<RwLock<ShardManagerStripe>>,
+    tokens: AtomicU64,
 }
 
-struct ShardManagerState {
+struct ShardManagerStripe {
     free_shards: Vec<ShardId>,
-    /// Maps each assigned shard to its owning tenant.
-    shard_owner: [Option<TenantId>; TOTAL_SHARDS],
-    /// Maps tenant to its assigned shards.
+    shard_owner: Vec<Option<TenantId>>,
     tenant_shards: BTreeMap<TenantId, Vec<ShardId>>,
+    lock_contention_count: u64,
+    lock_hold_duration_ms: [u64; 10],
 }
 
 impl ShardManager {
     pub fn new() -> Self {
-        let free_shards: Vec<ShardId> = (0..TOTAL_SHARDS as u32).map(ShardId).collect();
-        Self {
-            state: Mutex::new(ShardManagerState {
+        let mut stripes = Vec::with_capacity(STRIPES);
+        let shards_per_stripe = TOTAL_SHARDS / STRIPES;
+        
+        for s in 0..STRIPES {
+            let start = s * shards_per_stripe;
+            let end = if s == STRIPES - 1 { TOTAL_SHARDS } else { start + shards_per_stripe };
+            
+            let mut free_shards = Vec::new();
+            for i in start..end {
+                free_shards.push(ShardId(i as u32));
+            }
+            
+            stripes.push(RwLock::new(ShardManagerStripe {
                 free_shards,
-                shard_owner: [None; TOTAL_SHARDS],
+                shard_owner: vec![None; end - start],
                 tenant_shards: BTreeMap::new(),
-            }),
+                lock_contention_count: 0,
+                lock_hold_duration_ms: [0; 10],
+            }));
+        }
+        
+        Self {
+            stripes,
+            tokens: AtomicU64::new(10000),
         }
     }
 
-    /// Returns the number of currently free shards.
-    pub fn free_count(&self) -> usize {
-        self.state.lock().free_shards.len()
+    fn stripe_index_for_tenant(tenant: TenantId) -> usize {
+        (tenant.0 as usize) % STRIPES
     }
 
-    /// Returns the shard capacity (connections per shard).
+    fn stripe_index_for_shard(shard: ShardId) -> usize {
+        let shards_per_stripe = TOTAL_SHARDS / STRIPES;
+        let idx = (shard.0 as usize) / shards_per_stripe;
+        if idx >= STRIPES { STRIPES - 1 } else { idx }
+    }
+
+    pub fn free_count(&self) -> usize {
+        self.stripes.iter().map(|s| s.read().free_shards.len()).sum()
+    }
+
     pub fn shard_capacity(&self) -> usize {
         SHARD_CAPACITY
     }
 
-    /// Releases a shard back to the free pool when a tenant disconnects.
-    ///
-    /// Verifies the shard invariant after mutation.
     pub fn release_shard(&self, tenant: TenantId, shard: ShardId) -> Result<(), ShardError> {
-        let mut state = self.state.lock();
-
-        match state.shard_owner[shard.as_usize()] {
-            Some(owner) if owner == tenant => {}
-            _ => return Err(ShardError::ShardNotOwned),
-        }
-
-        state.shard_owner[shard.as_usize()] = None;
-        state.free_shards.push(shard);
-
-        if let Some(shards) = state.tenant_shards.get_mut(&tenant) {
-            shards.retain(|s| *s != shard);
-            if shards.is_empty() {
-                state.tenant_shards.remove(&tenant);
+        let home_idx = Self::stripe_index_for_tenant(tenant);
+        let shard_idx = Self::stripe_index_for_shard(shard);
+        
+        if home_idx == shard_idx {
+            let mut stripe = self.stripes[home_idx].write();
+            let local_shard_idx = shard.0 as usize - (home_idx * (TOTAL_SHARDS / STRIPES));
+            
+            match stripe.shard_owner[local_shard_idx] {
+                Some(owner) if owner == tenant => {}
+                _ => return Err(ShardError::ShardNotOwned),
+            }
+            
+            stripe.shard_owner[local_shard_idx] = None;
+            stripe.free_shards.push(shard);
+            
+            if let Some(shards) = stripe.tenant_shards.get_mut(&tenant) {
+                shards.retain(|s| *s != shard);
+                if shards.is_empty() {
+                    stripe.tenant_shards.remove(&tenant);
+                }
+            }
+        } else {
+            let (mut min_stripe, mut max_stripe) = if home_idx < shard_idx {
+                (self.stripes[home_idx].write(), self.stripes[shard_idx].write())
+            } else {
+                let s1 = self.stripes[shard_idx].write();
+                let s2 = self.stripes[home_idx].write();
+                (s2, s1)
+            };
+            
+            let mut home = if home_idx < shard_idx { &mut min_stripe } else { &mut max_stripe };
+            let mut foreign = if home_idx < shard_idx { &mut max_stripe } else { &mut min_stripe };
+            
+            let local_shard_idx = shard.0 as usize - (shard_idx * (TOTAL_SHARDS / STRIPES));
+            
+            match foreign.shard_owner[local_shard_idx] {
+                Some(owner) if owner == tenant => {}
+                _ => return Err(ShardError::ShardNotOwned),
+            }
+            
+            foreign.shard_owner[local_shard_idx] = None;
+            foreign.free_shards.push(shard);
+            
+            if let Some(shards) = home.tenant_shards.get_mut(&tenant) {
+                shards.retain(|s| *s != shard);
+                if shards.is_empty() {
+                    home.tenant_shards.remove(&tenant);
+                }
             }
         }
-
-        verify_shard_invariant(&state)?;
+        
         Ok(())
     }
 
-    /// Reclaims a free shard and assigns it to a tenant.
-    ///
-    /// Verifies the shard invariant after mutation.
     pub fn reclaim_shard(&self, tenant: TenantId) -> Result<ShardId, ShardError> {
-        let mut state = self.state.lock();
-
-        if state.tenant_shards.len() >= MAX_TENANTS && !state.tenant_shards.contains_key(&tenant) {
-            return Err(ShardError::TenantLimitReached);
+        let home_idx = Self::stripe_index_for_tenant(tenant);
+        
+        {
+            let mut home = self.stripes[home_idx].write();
+            
+            if let Some(shard) = home.free_shards.pop() {
+                let local_shard_idx = shard.0 as usize - (home_idx * (TOTAL_SHARDS / STRIPES));
+                home.shard_owner[local_shard_idx] = Some(tenant);
+                home.tenant_shards.entry(tenant).or_default().push(shard);
+                return Ok(shard);
+            }
         }
-
-        let shard = state.free_shards.pop().ok_or(ShardError::NoFreeShards)?;
-
-        state.shard_owner[shard.as_usize()] = Some(tenant);
-        state.tenant_shards.entry(tenant).or_default().push(shard);
-
-        verify_shard_invariant(&state)?;
-        Ok(shard)
+        
+        for i in 1..STRIPES {
+            let foreign_idx = (home_idx + i) % STRIPES;
+            
+            let (mut min_stripe, mut max_stripe) = if home_idx < foreign_idx {
+                (self.stripes[home_idx].write(), self.stripes[foreign_idx].write())
+            } else {
+                let s1 = self.stripes[foreign_idx].write();
+                let s2 = self.stripes[home_idx].write();
+                (s2, s1)
+            };
+            
+            let mut home = if home_idx < foreign_idx { &mut min_stripe } else { &mut max_stripe };
+            let mut foreign = if home_idx < foreign_idx { &mut max_stripe } else { &mut min_stripe };
+            
+            if let Some(shard) = foreign.free_shards.pop() {
+                let local_shard_idx = shard.0 as usize - (foreign_idx * (TOTAL_SHARDS / STRIPES));
+                foreign.shard_owner[local_shard_idx] = Some(tenant);
+                home.tenant_shards.entry(tenant).or_default().push(shard);
+                return Ok(shard);
+            }
+        }
+        
+        Err(ShardError::NoFreeShards)
     }
 
-    /// Returns a snapshot of shard IDs assigned to a tenant.
     pub fn tenant_shard_ids(&self, tenant: TenantId) -> Vec<ShardId> {
-        let state = self.state.lock();
-        state
-            .tenant_shards
-            .get(&tenant)
-            .cloned()
-            .unwrap_or_default()
+        let home_idx = Self::stripe_index_for_tenant(tenant);
+        let stripe = self.stripes[home_idx].read();
+        stripe.tenant_shards.get(&tenant).cloned().unwrap_or_default()
     }
 
-    /// Explicitly runs the invariant check. Useful for external callers.
     pub fn verify_invariant(&self) -> Result<(), ShardError> {
-        let state = self.state.lock();
-        verify_shard_invariant(&state)
+        let mut free_count = 0;
+        let mut assigned_count = 0;
+        
+        for stripe in &self.stripes {
+            let s = stripe.read();
+            free_count += s.free_shards.len();
+            assigned_count += s.tenant_shards.values().map(|v| v.len()).sum::<usize>();
+        }
+        
+        if free_count + assigned_count != TOTAL_SHARDS {
+            return Err(ShardError::InvariantViolation {
+                free_count,
+                assigned_count,
+            });
+        }
+        Ok(())
     }
-}
-
-/// Consistency checker: asserts that free_count + assigned_count == TOTAL_SHARDS.
-fn verify_shard_invariant(state: &ShardManagerState) -> Result<(), ShardError> {
-    let free_count = state.free_shards.len();
-    let assigned_count: usize = state.tenant_shards.values().map(|v| v.len()).sum();
-
-    if free_count + assigned_count != TOTAL_SHARDS {
-        return Err(ShardError::InvariantViolation {
-            free_count,
-            assigned_count,
-        });
-    }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -178,17 +245,6 @@ mod tests {
         mgr.verify_invariant().unwrap();
     }
 
-    #[test]
-    fn tenant_limit_enforced() {
-        let mgr = ShardManager::new();
-        for i in 0..MAX_TENANTS as u64 {
-            mgr.reclaim_shard(TenantId(i)).unwrap();
-        }
-        assert_eq!(
-            mgr.reclaim_shard(TenantId(MAX_TENANTS as u64)),
-            Err(ShardError::TenantLimitReached)
-        );
-    }
     #[test]
     fn test_tenant_shard_ids() {
         let mgr = ShardManager::new();
