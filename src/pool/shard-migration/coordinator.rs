@@ -7,7 +7,7 @@ pub struct MigrationCoordinator {
 impl MigrationCoordinator {
     pub fn new() -> Self {
         Self {
-            migration_epoch: AtomicU64::new(0),
+            migration_epoch: AtomicU64::new(1),
         }
     }
 
