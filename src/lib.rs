@@ -5,4 +5,4 @@ pub mod core;
 pub mod pool;
 pub mod identity;
 pub mod net;
-pub mod attestation;
+pub mod consensus;
