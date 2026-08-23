@@ -1,0 +1,1 @@
+pub struct FlowController { pub window_size: u64, pub ordered_only_mode: bool } impl FlowController { pub fn new() -> Self { Self { window_size: 64 * 1024, ordered_only_mode: false } } pub fn set_ordered_only_mode(&mut self, active: bool) { self.ordered_only_mode = active; if active { self.window_size /= 2; } } }
