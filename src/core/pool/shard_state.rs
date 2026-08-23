@@ -1,8 +1,8 @@
 use core::sync::atomic::{AtomicU64, Ordering};
 
-pub const TOTAL_SHARDS: usize = 100;
+pub const TOTAL_SHARDS: usize = 65536;
 pub const SHARD_CAPACITY: usize = 10;
-pub const MAX_TENANTS: usize = 50;
+pub const MAX_TENANTS: usize = 10000;
 
 /// Unique identifier for a shard (0..TOTAL_SHARDS).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
