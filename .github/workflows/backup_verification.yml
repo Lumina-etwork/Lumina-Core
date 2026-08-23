@@ -1,0 +1,22 @@
+name: Scheduled Database Backup Verification
+
+on:
+  schedule:
+    - cron: '0 2 * * *' # Run at 2 AM every day
+  workflow_dispatch:
+
+jobs:
+  verify-backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Run Backup Verification
+        run: |
+          chmod +x scripts/verify_backup.sh
+          ./scripts/verify_backup.sh
+
+      - name: Alert on Failure
+        if: failure()
+        run: echo "Sending alert for failed backup verification..."
