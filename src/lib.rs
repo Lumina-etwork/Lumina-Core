@@ -8,3 +8,4 @@ pub mod net;
 pub mod attestation;
 pub mod db_migration;
 pub mod cache;
+pub mod sync;
